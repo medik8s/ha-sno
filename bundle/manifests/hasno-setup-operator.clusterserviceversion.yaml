@@ -1,0 +1,280 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "app.hasno.com/v1alpha1",
+          "kind": "HALayerSet",
+          "metadata": {
+            "name": "halayerset-sample"
+          },
+          "spec": {
+            "deployments": [
+              "nginx-test",
+              "nginx-prod"
+            ],
+            "fenceAgentsSpec": [
+              {
+                "name": "fence_ipmilan_1",
+                "params": {
+                  "ip": "192.168.126.1",
+                  "ipport": "9111",
+                  "lanplus": "1",
+                  "password": "password",
+                  "pcmk_host_list": "cluster1",
+                  "username": "admin"
+                },
+                "type": "fence_ipmilan"
+              },
+              {
+                "name": "fence_ipmilan_2",
+                "params": {
+                  "ip": "192.168.126.1",
+                  "ipport": "9222",
+                  "lanplus": "1",
+                  "password": "password",
+                  "pcmk_host_list": "cluster2",
+                  "username": "admin"
+                },
+                "type": "fence_ipmilan"
+              }
+            ],
+            "nodesSpec": {
+              "firstNodeIP": "192.168.126.10",
+              "firstNodeName": "cluster1",
+              "secondNodeIP": "192.168.126.11",
+              "secondNodeName": "cluster2"
+            }
+          }
+        }
+      ]
+    capabilities: Basic Install
+    operators.operatorframework.io/builder: operator-sdk-v1.7.1+git
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+  name: hasno-setup-operator.v0.0.2
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: HALayerSet is the Schema for the halayersets API
+      displayName: HALayer Set
+      kind: HALayerSet
+      name: halayersets.app.hasno.com
+      version: v1alpha1
+  description: This operator creates one high availability cluster from two single
+    node openshift clusters.
+  displayName: HASNO-Setup
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - app.hasno.com
+          resources:
+          - halayersets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - app.hasno.com
+          resources:
+          - halayersets/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - app.hasno.com
+          resources:
+          - halayersets/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - list
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          verbs:
+          - create
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: hasno-setup-operator-controller-manager
+      deployments:
+      - name: hasno-setup-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=10
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                resources: {}
+              - args:
+                - --health-probe-bind-address=:8081
+                - --metrics-bind-address=127.0.0.1:8080
+                - --leader-elect
+                command:
+                - /manager
+                env:
+                - name: DEPLOYMENT_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                image: quay.io/mshitrit/hasno-setup-operator:0.0.2
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 500Mi
+                  requests:
+                    cpu: 100m
+                    memory: 300Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: hasno-setup-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: hasno-setup-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - hasno
+  links:
+  - name: Hasno Setup Operator
+    url: https://hasno-setup-operator.domain
+  maintainers:
+  - email: mshitrit@redhat.com
+    name: Michael Shitrit
+  maturity: alpha
+  provider:
+    name: mshitrit
+  version: 0.0.1
