@@ -1,0 +1,48 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: hasno-setup-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: HALayerSet is the Schema for the halayersets API
+      displayName: HALayer Set
+      kind: HALayerSet
+      name: halayersets.app.hasno.com
+      version: v1alpha1
+  description: This operator creates one high availability cluster from two single
+    node openshift clusters.
+  displayName: HASNO-Setup
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - hasno
+  links:
+  - name: Hasno Setup Operator
+    url: https://hasno-setup-operator.domain
+  maintainers:
+  - email: mshitrit@redhat.com
+    name: Michael Shitrit
+  maturity: alpha
+  provider:
+    name: mshitrit
+  version: 0.0.0

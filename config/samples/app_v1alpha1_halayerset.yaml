@@ -1,0 +1,33 @@
+apiVersion: app.hasno.com/v1alpha1
+kind: HALayerSet
+metadata:
+  name: halayerset-sample
+spec:
+  # Add fields here
+  deployments:
+    - "nginx-test"
+    - "nginx-prod"
+  fenceAgentsSpec:
+    - name: "fence_ipmilan_1"
+      type: "fence_ipmilan"
+      params:
+        ip: "192.168.126.1"
+        username: "admin"
+        password: "password"
+        ipport: "9111"
+        lanplus: "1"
+        pcmk_host_list: "cluster1"
+    - name: "fence_ipmilan_2"
+      type: "fence_ipmilan"
+      params:
+        ip: "192.168.126.1"
+        username: "admin"
+        password: "password"
+        ipport: "9222"
+        lanplus: "1"
+        pcmk_host_list: "cluster2"
+  nodesSpec:
+    firstNodeName: "cluster1"
+    firstNodeIP: "192.168.126.10"
+    secondNodeName: "cluster2"
+    secondNodeIP: "192.168.126.11"
