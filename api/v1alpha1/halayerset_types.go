@@ -50,9 +50,9 @@ type FenceAgentSpec struct {
 
 // NodesSpec contains names and ips of both SNO clusters nodes.
 type NodesSpec struct {
-	//FirstNodeName is the name of the first node in the cluster.
+	//FirstNodeName is the name of the first node in the cluster (the same name that was used creating the first SNO).
 	FirstNodeName string `json:"firstNodeName"`
-	//SecondNodeName is the name of the second node in the cluster.
+	//SecondNodeName is the name of the second node in the cluster (the same name that was used creating the second SNO).
 	SecondNodeName string `json:"secondNodeName"`
 	//FirstNodeIP is the ip address used by the first node in the cluster.
 	FirstNodeIP string `json:"firstNodeIP"`

@@ -77,7 +77,7 @@ spec:
                     type: string
                   firstNodeName:
                     description: FirstNodeName is the name of the first node in the
-                      cluster.
+                      cluster (the same name that was used creating the first SNO).
                     type: string
                   secondNodeIP:
                     description: SecondNodeIP is the ip address used by the second
@@ -85,7 +85,8 @@ spec:
                     type: string
                   secondNodeName:
                     description: SecondNodeName is the name of the second node in
-                      the cluster.
+                      the cluster (the same name that was used creating the second
+                      SNO).
                     type: string
                 required:
                 - firstNodeIP
