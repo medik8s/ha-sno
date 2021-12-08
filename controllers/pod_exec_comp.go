@@ -16,6 +16,8 @@ type pacemakerCommandHandler interface {
 	isPodRunning(podPhase corev1.PodPhase) bool
 	execCmdOnPacemaker(command []string, pod *corev1.Pod) (stdout, stderr string, err error)
 	extractHAStatus(result string) (*haStatus, error)
+	postDeploymentCreateHook()
+	postDeploymentDeleteHook()
 }
 
 type basePacemakerCommandHandler struct {
@@ -98,4 +100,12 @@ func (r *basePacemakerCommandHandler) extractHAStatus(result string) (*haStatus,
 	} else {
 		return &status, nil
 	}
+}
+
+func (r *basePacemakerCommandHandler) postDeploymentCreateHook() {
+	//Nothing to do here, at the moment this is only used as a hook to modify UT behaviour
+}
+
+func (r *basePacemakerCommandHandler) postDeploymentDeleteHook() {
+	//Nothing to do here, at the moment this is only used as a hook to modify UT behaviour
 }

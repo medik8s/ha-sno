@@ -42,6 +42,7 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var spyReconciler SpyHALayerSetReconciler
 
 const (
 	envVarApiServer = "TEST_ASSET_KUBE_APISERVER"
@@ -94,7 +95,7 @@ var _ = BeforeSuite(func() {
 		Client: k8sManager.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("halayerset-controller"),
 	}
-	spyReconciler := SpyHALayerSetReconciler{haReconciler}
+	spyReconciler = SpyHALayerSetReconciler{haReconciler}
 	err = spyReconciler.SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

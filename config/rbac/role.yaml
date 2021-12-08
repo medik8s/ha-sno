@@ -37,6 +37,8 @@ rules:
   resources:
   - deployments
   verbs:
+  - create
+  - delete
   - get
   - list
   - watch

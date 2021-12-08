@@ -25,7 +25,7 @@ const (
 )
 
 var (
-	haLayerPodName = createPodNameFromCRName(haLayerCRName)
+	haLayerPodName = createPodTemplateNameFromCRName(haLayerCRName)
 )
 
 type userAction int
@@ -65,7 +65,9 @@ var _ = Describe("High Availability Layer Set CR", func() {
 
 		})
 	})
+
 	Context("Reconciliation", func() {
+
 		BeforeEach(func() {
 			underTest = createHALayerSetCR()
 
@@ -77,7 +79,8 @@ var _ = Describe("High Availability Layer Set CR", func() {
 			case deleteCR:
 				Expect(k8sClient.Delete(context.Background(), underTest)).ToNot(HaveOccurred())
 				verifyCrIsMissing()
-				verifyPodIsMissing()
+				verifyHADeploymentIsMissing()
+				verifyHAPodIsMissing()
 			case updateCR:
 				existingCR, err := getHALayerCR()
 				Expect(err).To(BeNil())
@@ -103,11 +106,8 @@ var _ = Describe("High Availability Layer Set CR", func() {
 				})
 
 				It("HA layer pod isn't created", func() {
-					Consistently(
-						func() bool {
-							_, err := getHALayerPod()
-							return errors.IsNotFound(err)
-						}).Should(BeTrue())
+					verifyHADeploymentIsMissing()
+					verifyHAPodIsMissing()
 					verifyCmdCommands(doNothing)
 				})
 
@@ -120,7 +120,8 @@ var _ = Describe("High Availability Layer Set CR", func() {
 				})
 
 				It("HA layer pod is created", func() {
-					verifyPodExist()
+					verifyHADeploymentExist()
+					verifyHAPodExist()
 					verifyCmdCommands(createCR)
 
 				})
@@ -133,13 +134,15 @@ var _ = Describe("High Availability Layer Set CR", func() {
 					//Trigger pod creation so it can be deleted
 					Expect(k8sClient.Create(context.Background(), underTest)).ToNot(HaveOccurred())
 					verifyCRIsCreated()
-					verifyPodExist()
+					verifyHADeploymentExist()
+					verifyHAPodExist()
 
 				})
 
 				It("HA layer pod is deleted", func() {
 					verifyCrIsMissing()
-					verifyPodIsMissing()
+					verifyHADeploymentIsMissing()
+					verifyHAPodIsMissing()
 					verifyCmdCommands(deleteCR)
 				})
 
@@ -150,12 +153,14 @@ var _ = Describe("High Availability Layer Set CR", func() {
 					//Trigger pod creation so it can be updated
 					Expect(k8sClient.Create(context.Background(), underTest)).ToNot(HaveOccurred())
 					verifyCRIsCreated()
-					verifyPodExist()
+					verifyHADeploymentExist()
+					verifyHAPodExist()
 					userAction = updateCR
 				})
 
 				It("HA layer pod is updated", func() {
-					verifyPodExist()
+					verifyHADeploymentExist()
+					verifyHAPodExist()
 					verifyCmdCommands(updateCR)
 
 				})
@@ -189,7 +194,7 @@ func verifyCmdCommands(action userAction) {
 		}
 		verifyExpectedCommands(expectedCommands)
 	case updateCR:
-		Eventually(func() int { return len(execCmdCommands) }, time.Second, time.Millisecond*10).Should(BeEquivalentTo(5))
+		Eventually(func() int { return len(execCmdCommands) }, time.Second*5, time.Millisecond*10).Should(BeEquivalentTo(5))
 		expectedCommands := [][]string{
 			{"pcs", "stonith", "create", originalFenceAgentName, fenceAgentType},
 			{"pcs", "status", "xml"}, //appears twice
@@ -230,10 +235,18 @@ func containsStringSlice(expectedCommand []string, commands [][]string) bool {
 	return false
 }
 
-func verifyPodIsMissing() {
+func verifyHAPodIsMissing() {
 	Eventually(
 		func() bool {
 			_, err := getHALayerPod()
+			return errors.IsNotFound(err)
+		}, time.Second*10, time.Millisecond*10).Should(BeTrue())
+}
+
+func verifyHADeploymentIsMissing() {
+	Eventually(
+		func() bool {
+			_, err := spyReconciler.getHADeployment(defaultNamespace)
 			return errors.IsNotFound(err)
 		}, time.Second*10, time.Millisecond*10).Should(BeTrue())
 }
@@ -246,7 +259,15 @@ func verifyCrIsMissing() {
 		}, time.Second*10, time.Millisecond*10).Should(BeTrue())
 }
 
-func verifyPodExist() bool {
+func verifyHADeploymentExist() bool {
+	return Eventually(
+		func() bool {
+			_, err := spyReconciler.getHADeployment(defaultNamespace)
+			return err == nil
+		}, time.Second*10, time.Millisecond*10).Should(BeTrue())
+}
+
+func verifyHAPodExist() bool {
 	return Eventually(
 		func() bool {
 			_, err := getHALayerPod()
@@ -270,7 +291,8 @@ func cleanExecCommandsChannel() {
 func cleanUp() {
 	Eventually(deleteHALayerCR, time.Second*2, time.Millisecond*10).ShouldNot(HaveOccurred())
 	verifyCrIsMissing()
-	verifyPodIsMissing()
+	verifyHADeploymentIsMissing()
+	verifyHAPodIsMissing()
 	cleanExecCommandsChannel()
 }
 func deleteHALayerCR() error {
@@ -320,6 +342,8 @@ func createPod(name string) *v1.Pod {
 }
 
 func getHALayerPod() (*v1.Pod, error) {
+	//return spyReconciler.getHAPod(defaultNamespace)
+
 	key := client.ObjectKey{Name: haLayerPodName, Namespace: defaultNamespace}
 	pod := new(v1.Pod)
 	if err := k8sClient.Get(context.Background(), key, pod); err == nil {
@@ -327,6 +351,7 @@ func getHALayerPod() (*v1.Pod, error) {
 	} else {
 		return nil, err
 	}
+
 }
 
 func getHALayerCR() (*v1alpha1.HALayerSet, error) {
