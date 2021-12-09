@@ -184,7 +184,7 @@ func (r *HALayerSetReconciler) createDeployments(deploymentsToCreate []string, n
 
 	for _, dep := range deploymentsToCreate {
 
-		if err := r.verifyDeployment(dep, namespace); err != nil {
+		if err := r.verifyDeployment(dep, namespace, true); err != nil {
 			return err
 		}
 
@@ -216,7 +216,7 @@ func (r *HALayerSetReconciler) deleteDeployments(deploymentsToDelete []string, n
 
 	for _, dep := range deploymentsToDelete {
 
-		if err := r.verifyDeployment(dep, namespace); err != nil {
+		if err := r.verifyDeployment(dep, namespace, false); err != nil {
 			return err
 		}
 

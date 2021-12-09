@@ -469,7 +469,7 @@ func (r *HALayerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *HALayerSetReconciler) verifyDeployment(deploymentName string, namespace string) error {
+func (r *HALayerSetReconciler) verifyDeployment(deploymentName string, namespace string, isCreate bool) error {
 	deployment := new(v1.Deployment)
 	key := client.ObjectKey{Name: deploymentName, Namespace: namespace}
 	var err error
@@ -478,7 +478,8 @@ func (r *HALayerSetReconciler) verifyDeployment(deploymentName string, namespace
 		return err
 	}
 	//new deployment are created with 0 replicas, upon creation of resources in  the pacemaker container (in HALayer pod) the replicas will be adjusted.
-	if deployment.Spec.Replicas != nil && *deployment.Spec.Replicas > 0 {
+	if isCreate && deployment.Spec.Replicas != nil && *deployment.Spec.Replicas > 0 {
+		err = fmt.Errorf("deployment replica is not 0")
 		r.Log.Error(err, "Managed deployment replicas should be 0 ", "deployment name", deploymentName, "replicas", *deployment.Spec.Replicas)
 		return err
 	}
