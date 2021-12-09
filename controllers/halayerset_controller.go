@@ -387,8 +387,11 @@ func (r *HALayerSetReconciler) deleteHAService(namespace string) error {
 	service.Namespace = namespace
 	service.Name = serviceName
 	if err := r.Client.Delete(context.Background(), service); err != nil {
-		r.Log.Error(err, "Can't delete Service as part of tearing down the high availability layer")
-		return err
+		if !errors.IsNotFound(err) {
+			r.Log.Error(err, "Can't delete Service as part of tearing down the high availability layer", "service name", service.Name, "service namespace", service.Namespace)
+			return err
+		}
+		r.Log.Info("HALayer service was already deleted", "service name", service.Name, "service namespace", service.Namespace)
 	}
 	return nil
 }
