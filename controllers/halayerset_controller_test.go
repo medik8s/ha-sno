@@ -123,7 +123,6 @@ var _ = Describe("High Availability Layer Set CR", func() {
 					verifyHADeploymentExist()
 					verifyHAPodExist()
 					verifyCmdCommands(createCR)
-
 				})
 
 			})
@@ -178,15 +177,15 @@ var _ = Describe("High Availability Layer Set CR", func() {
 func verifyCmdCommands(action userAction) {
 	switch action {
 	case doNothing:
-		Eventually(func() int { return len(execCmdCommands) }, time.Second, time.Millisecond*10).Should(BeEquivalentTo(0))
+		Eventually(func() int { return len(execCmdCommands) }, time.Second*10, time.Millisecond*10).Should(BeEquivalentTo(0))
 	case createCR:
-		Eventually(func() int { return len(execCmdCommands) }, time.Second*3, time.Millisecond*10).Should(BeEquivalentTo(1))
+		Eventually(func() int { return len(execCmdCommands) }, time.Second*10, time.Millisecond*10).Should(BeEquivalentTo(1))
 		expectedCommands := [][]string{
 			{"pcs", "stonith", "create", originalFenceAgentName, fenceAgentType},
 		}
 		verifyExpectedCommands(expectedCommands)
 	case deleteCR:
-		Eventually(func() int { return len(execCmdCommands) }, time.Second, time.Millisecond*10).Should(BeEquivalentTo(3))
+		Eventually(func() int { return len(execCmdCommands) }, time.Second*10, time.Millisecond*10).Should(BeEquivalentTo(3))
 		expectedCommands := [][]string{
 			{"pcs", "status", "xml"},
 			{"pcs", "stonith", "create", originalFenceAgentName, fenceAgentType},
@@ -194,7 +193,7 @@ func verifyCmdCommands(action userAction) {
 		}
 		verifyExpectedCommands(expectedCommands)
 	case updateCR:
-		Eventually(func() int { return len(execCmdCommands) }, time.Second*5, time.Millisecond*10).Should(BeEquivalentTo(5))
+		Eventually(func() int { return len(execCmdCommands) }, time.Second*10, time.Millisecond*10).Should(BeEquivalentTo(5))
 		expectedCommands := [][]string{
 			{"pcs", "stonith", "create", originalFenceAgentName, fenceAgentType},
 			{"pcs", "status", "xml"}, //appears twice
@@ -246,7 +245,7 @@ func verifyHAPodIsMissing() {
 func verifyHADeploymentIsMissing() {
 	Eventually(
 		func() bool {
-			_, err := spyReconciler.getHADeployment(defaultNamespace)
+			_, err := spyReconciler.getHADeployment(defaultNamespace, true)
 			return errors.IsNotFound(err)
 		}, time.Second*10, time.Millisecond*10).Should(BeTrue())
 }
@@ -262,7 +261,7 @@ func verifyCrIsMissing() {
 func verifyHADeploymentExist() bool {
 	return Eventually(
 		func() bool {
-			_, err := spyReconciler.getHADeployment(defaultNamespace)
+			_, err := spyReconciler.getHADeployment(defaultNamespace, true)
 			return err == nil
 		}, time.Second*10, time.Millisecond*10).Should(BeTrue())
 }
