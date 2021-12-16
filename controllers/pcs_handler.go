@@ -20,9 +20,9 @@ const (
 )
 
 var (
-	kClient         *kubernetes.Clientset
-	k8sClientConfig *restclient.Config
-	podNameHALayer  string
+	kClient                *kubernetes.Clientset
+	k8sClientConfig        *restclient.Config
+	haLayerPodTemplateName string
 )
 
 type haStatus struct {
@@ -196,7 +196,7 @@ func (r *HALayerSetReconciler) createDeployments(deploymentsToCreate []string, n
 
 		_, _, err = r.execCmdOnPacemaker([]string{"pcs", "resource", "create", resourceName, "k8sDeployment", fmt.Sprintf("deployment=%s", dep), fmt.Sprintf("namespace=%s", namespace), "--force"}, pod)
 		if err != nil {
-			r.Log.Error(err, "Can't create resource on HA Layer pod in order to manage the deployment", "HA Layer pod name", podNameHALayer, "resource name", resourceName, "deployment name", dep)
+			r.Log.Error(err, "Can't create resource on HA Layer pod in order to manage the deployment", "HA Layer pod template name", haLayerPodTemplateName, "resource name", resourceName, "deployment name", dep)
 			return err
 		}
 		r.Log.Info("deployment created", "deployment name", resourceName)
@@ -242,7 +242,7 @@ func (r *HALayerSetReconciler) removeResource(resourceName string, namespace str
 		r.Log.Info("Can't remove resource, trying cleanup", "resource name", resourceName)
 		_, _, err = r.execCmdOnPacemaker([]string{"pcs", "resource", "cleanup", resourceName}, pod)
 		if err != nil {
-			r.Log.Error(err, "Can't delete resource on HA Layer pod ", "HA Layer pod name", podNameHALayer, "resource name", resourceName)
+			r.Log.Error(err, "Can't delete resource on HA Layer pod ", "HA Layer pod template name", haLayerPodTemplateName, "resource name", resourceName)
 			return err
 		}
 	}

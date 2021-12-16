@@ -24,7 +24,9 @@ import (
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"net/http"
 	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +38,7 @@ import (
 //+kubebuilder:rbac:groups=app.hasno.com,resources=halayersets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=app.hasno.com,resources=halayersets/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=app.hasno.com,resources=halayersets/finalizers,verbs=update
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;create;delete;watch
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;delete;create;watch
 //+kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create
 //+kubebuilder:rbac:groups=core,resources=services,verbs=create;delete;update;watch;list
@@ -65,6 +67,10 @@ const (
 
 	deploymentNamespaceEnvVar = "DEPLOYMENT_NAMESPACE"
 	haSnoFinalizer            = "app.hasno.com/finalizer"
+)
+
+var (
+	haPodLabels = map[string]string{"app": haClusterName}
 )
 
 type Scenario int
@@ -152,7 +158,7 @@ func (r *HALayerSetReconciler) initialize(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 	//set var for ha layer pod name
-	podNameHALayer = createPodNameFromCRName(hals.Name)
+	haLayerPodTemplateName = createPodTemplateNameFromCRName(hals.Name)
 
 	if err := r.addFinalizer(ctx, hals); err != nil {
 		return ctrl.Result{}, err
@@ -184,7 +190,7 @@ func (r *HALayerSetReconciler) initialize(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func createPodNameFromCRName(halsCRName string) string {
+func createPodTemplateNameFromCRName(halsCRName string) string {
 	return fmt.Sprintf("%s-%s", halsCRName, podNameHALayerSuffix)
 }
 
@@ -249,28 +255,71 @@ func (r *HALayerSetReconciler) deleteHALayerResources(namespace string) error {
 	return nil
 }
 
-func (r *HALayerSetReconciler) deleteHAPod(namespace string) error {
-	pod, err := r.getHAPod(namespace)
+func (r *HALayerSetReconciler) deleteHADeployment(namespace string) error {
+	haDeployment, err := r.getHADeployment(namespace)
 	if err != nil {
-		r.Log.Error(err, "Can't fetch high availability pod as part of tearing down the high availability layer")
 		return err
 	}
-	if err := r.Client.Delete(context.Background(), pod); err != nil {
-		r.Log.Error(err, "Can't delete high availability pod as part of tearing down the high availability layer")
+
+	if err := r.Client.Delete(context.Background(), haDeployment); err != nil {
+		r.Log.Error(err, "Can't delete high availability deployment as part of tearing down the high availability layer")
 		return err
 	}
+
+	r.pacemakerCommandHandler.postDeploymentDeleteHook()
 	return nil
 }
 
-func (r *HALayerSetReconciler) createHAPod(hals *appv1alpha1.HALayerSet) error {
+func (r *HALayerSetReconciler) getHADeployment(namespace string) (*v1.Deployment, error) {
+	haDeployment := &v1.Deployment{}
+	key := client.ObjectKey{Name: r.getHADeploymentName(), Namespace: namespace}
+	if err := r.Client.Get(context.Background(), key, haDeployment); err != nil {
+		r.Log.Error(err, "Can't fetch high availability deployment as part of tearing down the high availability layer")
+		return nil, err
+	}
+	return haDeployment, nil
+}
+
+func (r *HALayerSetReconciler) createHADeployment(hals *appv1alpha1.HALayerSet) error {
 	nodeName, err := r.getNodeName()
 	if err != nil {
 		return err
 	}
+	pod := r.buildHALayerPod(hals, nodeName)
+	var replicas int32 = 1
+	deployment := &v1.Deployment{}
+	deployment.Spec.Replicas = &replicas
+	deployment.Spec.Template.Spec = pod.Spec
+	deployment.Spec.Template.Name = haLayerPodTemplateName
+	deployment.Spec.Template.Namespace = pod.Namespace
+	deployment.Namespace = pod.Namespace
+	deployment.Name = r.getHADeploymentName()
+	//Labels
+	deployment.Labels = pod.Labels
+	deployment.Spec.Selector = &metav1.LabelSelector{MatchLabels: pod.Labels}
+	deployment.Spec.Template.Labels = pod.Labels
+
+	if err := r.Client.Create(context.Background(), deployment); err != nil {
+		if !errors.IsAlreadyExists(err) {
+			r.Log.Error(err, "Can't create HALayer deployment as part of setting up the high availability layer")
+			return err
+		}
+		r.Log.Info("HALayer deployment already exist", "deployment name", deployment.Name)
+	} else {
+		r.Log.Info("HALayer deployment created", "deployment name", deployment.Name)
+	}
+	r.pacemakerCommandHandler.postDeploymentCreateHook()
+	return nil
+}
+
+func (r *HALayerSetReconciler) getHADeploymentName() string {
+	return fmt.Sprintf("%s-deployment", haLayerPodTemplateName)
+}
+
+func (r *HALayerSetReconciler) buildHALayerPod(hals *appv1alpha1.HALayerSet, nodeName string) *corev1.Pod {
 	pod := &corev1.Pod{}
 	pod.Namespace = hals.Namespace
-	pod.Name = podNameHALayer
-	pod.Labels = map[string]string{"app": haClusterName}
+	pod.Labels = haPodLabels
 	pod.Spec.Hostname = nodeName
 	pod.Spec.ServiceAccountName = serviceAccountName
 
@@ -334,13 +383,7 @@ func (r *HALayerSetReconciler) createHAPod(hals *appv1alpha1.HALayerSet) error {
 			SecurityContext: &corev1.SecurityContext{Privileged: &trueVal},
 		},
 	}
-
-	if err := r.Client.Create(context.Background(), pod); err != nil {
-		r.Log.Error(err, "Can't create Pod as part of setting up the high availability layer")
-		return err
-	}
-	r.Log.Info("HA Pod created", "pod name", pod.Name)
-	return nil
+	return pod
 }
 
 func (r *HALayerSetReconciler) deleteHAService(namespace string) error {
@@ -402,7 +445,7 @@ func (r *HALayerSetReconciler) createHALayer(hals *appv1alpha1.HALayerSet) error
 	if err := r.createHAService(hals); err != nil {
 		return err
 	}
-	if err := r.createHAPod(hals); err != nil {
+	if err := r.createHADeployment(hals); err != nil {
 		return err
 	}
 	return nil
@@ -413,7 +456,7 @@ func (r *HALayerSetReconciler) deleteHALayer(namespace string) error {
 		return err
 	}
 
-	if err := r.deleteHAPod(namespace); err != nil {
+	if err := r.deleteHADeployment(namespace); err != nil {
 		return err
 	}
 
@@ -444,15 +487,29 @@ func (r *HALayerSetReconciler) verifyDeployment(deploymentName string, namespace
 }
 
 func (r *HALayerSetReconciler) getHAPod(namespace string) (*corev1.Pod, error) {
-	key := client.ObjectKey{Name: podNameHALayer, Namespace: namespace}
-	pod := new(corev1.Pod)
-	if err := r.Client.Get(context.Background(), key, pod); err != nil {
-		if !errors.IsNotFound(err) {
-			r.Log.Error(err, "failed fetching HA layer pod", "pod name", podNameHALayer)
-		}
+
+	pods := new(corev1.PodList)
+
+	haPodLabelsSelector, _ := metav1.LabelSelectorAsSelector(
+		&metav1.LabelSelector{MatchLabels: haPodLabels})
+	options := client.ListOptions{
+		LabelSelector: haPodLabelsSelector,
+		Namespace:     namespace,
+	}
+	if err := r.Client.List(context.Background(), pods, &options); err != nil {
+		r.Log.Error(err, "failed fetching HA layer pod")
 		return nil, err
 	}
-	return pod, nil
+	if len(pods.Items) == 0 {
+		r.Log.Info("No HA Layer pods were found")
+		podNotFoundErr := &errors.StatusError{ErrStatus: metav1.Status{
+			Status: metav1.StatusFailure,
+			Code:   http.StatusNotFound,
+			Reason: metav1.StatusReasonNotFound,
+		}}
+		return nil, podNotFoundErr
+	}
+	return &pods.Items[0], nil
 
 }
 
@@ -478,10 +535,10 @@ func (r *HALayerSetReconciler) verifyPodIsRunning(hals *appv1alpha1.HALayerSet) 
 	}
 
 	if err != nil {
-		r.Log.Error(err, "Could not retrieve HA pod", "pod name", podNameHALayer)
+		r.Log.Error(err, "Could not retrieve HA pod", "pod template name", haLayerPodTemplateName)
 	} else {
-		err = fmt.Errorf("%s pod didn't start properly", podNameHALayer)
-		r.Log.Error(err, "HA pod didn't start properly", "pod name", podNameHALayer, "pod phase", podPhase)
+		err = fmt.Errorf("ha layer pod didn't start properly")
+		r.Log.Error(err, "HA pod didn't start properly", "pod template name", haLayerPodTemplateName, "pod phase", podPhase)
 	}
 	return err
 }
@@ -672,7 +729,7 @@ func (r *HALayerSetReconciler) createFenceAgent(agent appv1alpha1.FenceAgentSpec
 	if pod, err := r.getHAPod(namespace); err == nil {
 		_, _, err := r.execCmdOnPacemaker(command, pod)
 		if err != nil {
-			r.Log.Error(err, "Can't create fence agent on HA Layer pod", "HA Layer pod name", podNameHALayer, "fence agent name", agent.Name, "fence agent type", agent.Type)
+			r.Log.Error(err, "Can't create fence agent on HA Layer pod", "HA Layer pod template name", haLayerPodTemplateName, "fence agent name", agent.Name, "fence agent type", agent.Type)
 			return err
 		}
 		r.Log.Info("fence agent created", "fence agent name", agent.Name, "fence agent type", agent.Type)
