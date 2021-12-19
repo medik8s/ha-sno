@@ -56,21 +56,17 @@ import (
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 
 const (
-	//Assumptions
-	//1. Cluster domain is shared by both clusters
-	//2. SNO1 & SNO2 are named cluster1 & cluster2
+	//Assumption - Cluster domain is shared by both clusters
 	haClusterName      = "aio-pair"
-	sno1Name           = "cluster1"
-	sno2Name           = "cluster2"
 	serviceName        = "cluster"
 	serviceAccountName = "hasno-setup-operator-aio-cluster-role"
 
 	deploymentNamespaceEnvVar = "DEPLOYMENT_NAMESPACE"
-	haSnoFinalizer            = "app.hasno.com/finalizer"
 )
 
 var (
-	haPodLabels = map[string]string{"app": haClusterName}
+	haPodLabels    = map[string]string{"app": haClusterName}
+	haSnoFinalizer = fmt.Sprintf("%s/finalizer", appv1alpha1.GroupVersion.Group)
 )
 
 type Scenario int
@@ -332,8 +328,8 @@ func (r *HALayerSetReconciler) buildHALayerPod(hals *appv1alpha1.HALayerSet, nod
 
 	pod.Spec.HostNetwork = true
 	pod.Spec.HostAliases = []corev1.HostAlias{
-		{IP: hals.Spec.NodesSpec.FirstNodeIP, Hostnames: []string{sno1Name}},
-		{IP: hals.Spec.NodesSpec.SecondNodeIP, Hostnames: []string{sno2Name}},
+		{IP: hals.Spec.NodesSpec.FirstNodeIP, Hostnames: []string{hals.Spec.NodesSpec.FirstNodeName}},
+		{IP: hals.Spec.NodesSpec.SecondNodeIP, Hostnames: []string{hals.Spec.NodesSpec.SecondNodeName}},
 	}
 	trueVal := true
 	pod.Spec.Containers = []corev1.Container{
@@ -372,9 +368,9 @@ func (r *HALayerSetReconciler) buildHALayerPod(hals *appv1alpha1.HALayerSet, nod
 			Env: []corev1.EnvVar{
 				//this values are necessary for corosync container creation.
 				//source code at: https://github.com/mshitrit/pcmk/blob/add_fence_agents/setup.sh
-				{Name: "NODE1NAME", Value: sno1Name},
+				{Name: "NODE1NAME", Value: hals.Spec.NodesSpec.FirstNodeName},
 				{Name: "NODE1ADDR", Value: hals.Spec.NodesSpec.FirstNodeIP},
-				{Name: "NODE2NAME", Value: sno2Name},
+				{Name: "NODE2NAME", Value: hals.Spec.NodesSpec.SecondNodeName},
 				{Name: "NODE2ADDR", Value: hals.Spec.NodesSpec.SecondNodeIP},
 
 				{Name: "CLUSTER_NAME", Value: haClusterName},
