@@ -294,7 +294,6 @@ func (r *HALayerSetReconciler) createHADeployment(hals *appv1alpha1.HALayerSet) 
 	deployment.Labels = pod.Labels
 	deployment.Spec.Selector = &metav1.LabelSelector{MatchLabels: pod.Labels}
 	deployment.Spec.Template.Labels = pod.Labels
-
 	if err := r.Client.Create(context.Background(), deployment); err != nil {
 		if !errors.IsAlreadyExists(err) {
 			r.Log.Error(err, "Can't create HALayer deployment as part of setting up the high availability layer")
@@ -318,6 +317,7 @@ func (r *HALayerSetReconciler) buildHALayerPod(hals *appv1alpha1.HALayerSet, nod
 	pod.Labels = haPodLabels
 	pod.Spec.Hostname = nodeName
 	pod.Spec.ServiceAccountName = serviceAccountName
+	pod.Spec.PriorityClassName = "system-node-critical"
 
 	var hostPathTypeVal = corev1.HostPathDirectoryOrCreate
 	pod.Spec.Volumes = []corev1.Volume{
