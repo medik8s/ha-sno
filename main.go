@@ -86,6 +86,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "HALayerSet")
 		os.Exit(1)
 	}
+	if err = (&appv1alpha1.HALayerSet{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "HALayerSet")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

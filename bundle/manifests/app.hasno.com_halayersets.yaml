@@ -2,10 +2,21 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: hasno-setup-operator-system/hasno-setup-operator-serving-cert
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
   name: halayersets.app.hasno.com
 spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: hasno-setup-operator-webhook-service
+          namespace: hasno-setup-operator-system
+          path: /convert
+      conversionReviewVersions:
+      - v1
   group: app.hasno.com
   names:
     kind: HALayerSet
@@ -75,7 +86,7 @@ spec:
                     type: string
                   firstNodeName:
                     description: FirstNodeName is the name of the first node in the
-                      cluster.
+                      cluster (the same name that was used creating the first SNO).
                     type: string
                   secondNodeIP:
                     description: SecondNodeIP is the ip address used by the second
@@ -83,7 +94,8 @@ spec:
                     type: string
                   secondNodeName:
                     description: SecondNodeName is the name of the second node in
-                      the cluster.
+                      the cluster (the same name that was used creating the second
+                      SNO).
                     type: string
                 required:
                 - firstNodeIP
