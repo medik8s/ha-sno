@@ -6,6 +6,7 @@ import (
 	appv1alpha1 "github.com/mshitrit/hasno-setup-operator/api/v1alpha1"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"strings"
 	"time"
 )
@@ -76,30 +77,30 @@ func (r *HALayerSetReconciler) getHALayerResources(namespace string) (*resources
 	}
 }
 
-func (r *HALayerSetReconciler) isAllowedToModify(hals *appv1alpha1.HALayerSet) (bool, error) {
+func (r *HALayerSetReconciler) isAllowedToModify(hals *appv1alpha1.HALayerSet) (bool, error, ctrl.Result) {
 	nodeName, err := r.getNodeName()
 	if err != nil {
-		return false, err
+		return false, err, ctrl.Result{}
 	}
 
 	isMainNode := r.isMainNode(hals, nodeName)
 	if isMainNode {
-		return true, nil
+		return true, nil, ctrl.Result{}
 	}
 
 	//necessary for next step of querying peer
-	if err := r.verifyPodIsRunning(hals); err != nil {
-		return false, err
+	if res, err := r.verifyPodIsRunning(hals); err != nil || res.Requeue {
+		return false, err, res
 	}
 
 	isPeerActive, err := r.verifyIsPeerActive(hals.Namespace)
 	if err != nil {
-		return false, err
+		return false, err, ctrl.Result{}
 	}
 	if isPeerActive {
 		r.Log.Info("CR change will not be applied by the operator because current node does not have priority to apply the modification", "current node name", nodeName, "all nodes names", fmt.Sprintf("%s, %s", hals.Spec.NodesSpec.FirstNodeName, hals.Spec.NodesSpec.SecondNodeName))
 	}
-	return !isPeerActive, nil
+	return !isPeerActive, nil, ctrl.Result{}
 
 }
 
@@ -184,7 +185,7 @@ func (r *HALayerSetReconciler) createDeployments(deploymentsToCreate []string, n
 
 	for _, dep := range deploymentsToCreate {
 
-		if err := r.verifyDeployment(dep, namespace); err != nil {
+		if err := r.verifyDeployment(dep, namespace, true); err != nil {
 			return err
 		}
 
@@ -216,7 +217,7 @@ func (r *HALayerSetReconciler) deleteDeployments(deploymentsToDelete []string, n
 
 	for _, dep := range deploymentsToDelete {
 
-		if err := r.verifyDeployment(dep, namespace); err != nil {
+		if err := r.verifyDeployment(dep, namespace, false); err != nil {
 			return err
 		}
 

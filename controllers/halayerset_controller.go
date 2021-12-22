@@ -170,8 +170,8 @@ func (r *HALayerSetReconciler) initialize(ctx context.Context, req ctrl.Request)
 	}
 
 	if r.isMainNode(hals, nodeName) {
-		if err := r.verifyPodIsRunning(hals); err != nil {
-			return ctrl.Result{}, err
+		if res, err := r.verifyPodIsRunning(hals); err != nil || res.Requeue {
+			return res, err
 		}
 
 		if err := r.createFenceAgents(hals); err != nil {
@@ -207,19 +207,17 @@ func (r *HALayerSetReconciler) deletion(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	var isAllowedToModify bool
-	if isAllowedToModify, err = r.isAllowedToModify(hals); err != nil {
+	if isAllowedToModify, err, result := r.isAllowedToModify(hals); !isAllowedToModify {
+		return result, err
+	}
+
+	//Delete pcs resources in HA Layer
+	if err := r.deleteHALayerResources(hals.Namespace); err != nil {
 		return ctrl.Result{}, err
 	}
-	if isAllowedToModify {
-		//Delete pcs resources in HA Layer
-		if err := r.deleteHALayerResources(hals.Namespace); err != nil {
-			return ctrl.Result{}, err
-		}
 
-		if err := r.deleteHALayer(hals.Namespace); err != nil {
-			return ctrl.Result{}, err
-		}
+	if err := r.deleteHALayer(hals.Namespace); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	if err := r.removeFinalizer(hals); err != nil {
@@ -252,7 +250,7 @@ func (r *HALayerSetReconciler) deleteHALayerResources(namespace string) error {
 }
 
 func (r *HALayerSetReconciler) deleteHADeployment(namespace string) error {
-	haDeployment, err := r.getHADeployment(namespace)
+	haDeployment, err := r.getHADeployment(namespace, true)
 	if err != nil {
 		return err
 	}
@@ -266,11 +264,13 @@ func (r *HALayerSetReconciler) deleteHADeployment(namespace string) error {
 	return nil
 }
 
-func (r *HALayerSetReconciler) getHADeployment(namespace string) (*v1.Deployment, error) {
+func (r *HALayerSetReconciler) getHADeployment(namespace string, isLogNotFound bool) (*v1.Deployment, error) {
 	haDeployment := &v1.Deployment{}
 	key := client.ObjectKey{Name: r.getHADeploymentName(), Namespace: namespace}
 	if err := r.Client.Get(context.Background(), key, haDeployment); err != nil {
-		r.Log.Error(err, "Can't fetch high availability deployment as part of tearing down the high availability layer")
+		if !errors.IsNotFound(err) || isLogNotFound {
+			r.Log.Error(err, "Can't fetch high availability deployment")
+		}
 		return nil, err
 	}
 	return haDeployment, nil
@@ -387,8 +387,11 @@ func (r *HALayerSetReconciler) deleteHAService(namespace string) error {
 	service.Namespace = namespace
 	service.Name = serviceName
 	if err := r.Client.Delete(context.Background(), service); err != nil {
-		r.Log.Error(err, "Can't delete Service as part of tearing down the high availability layer")
-		return err
+		if !errors.IsNotFound(err) {
+			r.Log.Error(err, "Can't delete Service as part of tearing down the high availability layer", "service name", service.Name, "service namespace", service.Namespace)
+			return err
+		}
+		r.Log.Info("HALayer service was already deleted", "service name", service.Name, "service namespace", service.Namespace)
 	}
 	return nil
 }
@@ -466,7 +469,7 @@ func (r *HALayerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *HALayerSetReconciler) verifyDeployment(deploymentName string, namespace string) error {
+func (r *HALayerSetReconciler) verifyDeployment(deploymentName string, namespace string, isCreate bool) error {
 	deployment := new(v1.Deployment)
 	key := client.ObjectKey{Name: deploymentName, Namespace: namespace}
 	var err error
@@ -475,7 +478,8 @@ func (r *HALayerSetReconciler) verifyDeployment(deploymentName string, namespace
 		return err
 	}
 	//new deployment are created with 0 replicas, upon creation of resources in  the pacemaker container (in HALayer pod) the replicas will be adjusted.
-	if deployment.Spec.Replicas != nil && *deployment.Spec.Replicas > 0 {
+	if isCreate && deployment.Spec.Replicas != nil && *deployment.Spec.Replicas > 0 {
+		err = fmt.Errorf("deployment replica is not 0")
 		r.Log.Error(err, "Managed deployment replicas should be 0 ", "deployment name", deploymentName, "replicas", *deployment.Spec.Replicas)
 		return err
 	}
@@ -508,35 +512,34 @@ func (r *HALayerSetReconciler) getHAPod(namespace string) (*corev1.Pod, error) {
 	return &pods.Items[0], nil
 
 }
+func (r *HALayerSetReconciler) verifyPodIsRunning(hals *appv1alpha1.HALayerSet) (ctrl.Result, error) {
+	dep, err := r.getHADeployment(hals.Namespace, true)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	isDeploymentFresh := dep.GetCreationTimestamp().Add(time.Second * 30).After(time.Now())
 
-func (r *HALayerSetReconciler) verifyPodIsRunning(hals *appv1alpha1.HALayerSet) error {
-	var pod *corev1.Pod
-	var err error
-	var podPhase corev1.PodPhase
-	waitTimeLeftSeconds := 30
-	for waitTimeLeftSeconds > 0 {
-		if pod, err = r.getHAPod(hals.Namespace); err != nil {
-			time.Sleep(time.Second)
-			waitTimeLeftSeconds--
+	if pod, err := r.getHAPod(hals.Namespace); err == nil { //pod found
+		if r.isPodRunning(pod.Status.Phase) {
+			return ctrl.Result{}, nil
+		} else if isDeploymentFresh { //Pod created but not ready
+			r.Log.Info("Deployment HALayer pod isn't ready yet queueing for 30 seconds")
+			return ctrl.Result{RequeueAfter: time.Second * 30, Requeue: true}, nil
 		} else {
-			err = nil
-			podPhase = pod.Status.Phase
+			err = fmt.Errorf("ha layer pod didn't start properly")
+			r.Log.Error(err, "HA pod didn't start properly", "pod template name", haLayerPodTemplateName, "pod phase", pod.Status.Phase)
+			return ctrl.Result{}, err
+		}
 
-			if r.isPodRunning(podPhase) {
-				return nil
-			}
-			time.Sleep(time.Second)
-			waitTimeLeftSeconds--
+	} else { //Pod Not found
+		if isDeploymentFresh { //fresh deployment give the pod some time to be created
+			r.Log.Info("Deployment HALayer pod isn't created yet queueing for 30 seconds")
+			return ctrl.Result{RequeueAfter: time.Second * 30, Requeue: true}, nil
+		} else {
+			r.Log.Error(err, "Could not retrieve HA pod", "pod template name", haLayerPodTemplateName)
+			return ctrl.Result{}, err
 		}
 	}
-
-	if err != nil {
-		r.Log.Error(err, "Could not retrieve HA pod", "pod template name", haLayerPodTemplateName)
-	} else {
-		err = fmt.Errorf("ha layer pod didn't start properly")
-		r.Log.Error(err, "HA pod didn't start properly", "pod template name", haLayerPodTemplateName, "pod phase", podPhase)
-	}
-	return err
 }
 
 func (r *HALayerSetReconciler) getNodeName() (string, error) {
@@ -554,7 +557,7 @@ func (r *HALayerSetReconciler) getNodeName() (string, error) {
 }
 
 func (r *HALayerSetReconciler) getScenario(hals *appv1alpha1.HALayerSet) (Scenario, error) {
-	if _, err := r.getHAPod(hals.Namespace); err == nil { //Pod exist and CR exist - update scenario
+	if _, err := r.getHADeployment(hals.Namespace, false); err == nil { //HA Deployment and exist and CR exist - update scenario
 		isHalsMarkedToBeDeleted := hals.GetDeletionTimestamp() != nil
 		if isHalsMarkedToBeDeleted {
 			return deletion, nil
@@ -575,22 +578,20 @@ func (r *HALayerSetReconciler) update(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	var isAllowedToModify bool
-	if isAllowedToModify, err = r.isAllowedToModify(hals); err != nil {
+	if isAllowedToModify, err, result := r.isAllowedToModify(hals); !isAllowedToModify {
+		return result, err
+	}
+
+	if res, err := r.verifyPodIsRunning(hals); err != nil || res.Requeue {
+		return res, err
+	}
+
+	if err := r.reconcileFenceAgents(hals); err != nil {
 		return ctrl.Result{}, err
 	}
-	if isAllowedToModify {
-		if err := r.verifyPodIsRunning(hals); err != nil {
-			return ctrl.Result{}, err
-		}
 
-		if err := r.reconcileFenceAgents(hals); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		if err := r.reconcileDeployments(hals); err != nil {
-			return ctrl.Result{}, err
-		}
+	if err := r.reconcileDeployments(hals); err != nil {
+		return ctrl.Result{}, err
 	}
 	r.Log.Info("update finished successfully")
 	return ctrl.Result{}, nil

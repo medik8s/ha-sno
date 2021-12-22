@@ -61,6 +61,7 @@ func createHALayerPod() *corev1.Pod {
 
 func (r *mockPacemakerCommandHandler) postDeploymentCreateHook() {
 	Expect(k8sClient.Create(context.Background(), createHALayerPod())).ToNot(HaveOccurred())
+	verifyHAPodExist()
 }
 
 func (r *mockPacemakerCommandHandler) postDeploymentDeleteHook() {
