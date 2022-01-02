@@ -13,7 +13,7 @@ spec:
     - description: HALayerSet is the Schema for the halayersets API
       displayName: HALayer Set
       kind: HALayerSet
-      name: halayersets.app.hasno.com
+      name: halayersets.ha-sno.medik8s.io
       version: v1alpha1
   description: This operator creates one high availability cluster from two single
     node openshift clusters.

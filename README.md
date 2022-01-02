@@ -23,7 +23,7 @@ Some companies have a need for a highly available container management solution 
 ## Example CRs
 An example HASNO object.
 ```yaml
-   apiVersion: app.hasno.com/v1alpha1
+   apiVersion: ha-sno.medik8s.io/v1alpha1
    kind: HALayerSet
    metadata:
      name: halayerset-sample

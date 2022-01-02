@@ -5,7 +5,7 @@ metadata:
   name: halayerset-editor-role
 rules:
 - apiGroups:
-  - app.hasno.com
+  - ha-sno.medik8s.io
   resources:
   - halayersets
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - app.hasno.com
+  - ha-sno.medik8s.io
   resources:
   - halayersets/status
   verbs:
