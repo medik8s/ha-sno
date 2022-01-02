@@ -5,7 +5,7 @@ metadata:
     cert-manager.io/inject-ca-from: hasno-setup-operator-system/hasno-setup-operator-serving-cert
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: halayersets.app.hasno.com
+  name: halayersets.ha-sno.medik8s.io
 spec:
   conversion:
     strategy: Webhook
@@ -17,7 +17,7 @@ spec:
           path: /convert
       conversionReviewVersions:
       - v1
-  group: app.hasno.com
+  group: ha-sno.medik8s.io
   names:
     kind: HALayerSet
     listKind: HALayerSetList

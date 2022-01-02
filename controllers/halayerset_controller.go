@@ -35,9 +35,9 @@ import (
 	"time"
 )
 
-//+kubebuilder:rbac:groups=app.hasno.com,resources=halayersets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=app.hasno.com,resources=halayersets/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=app.hasno.com,resources=halayersets/finalizers,verbs=update
+//+kubebuilder:rbac:groups=ha-sno.medik8s.io,resources=halayersets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=ha-sno.medik8s.io,resources=halayersets/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=ha-sno.medik8s.io,resources=halayersets/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;create;delete;watch
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;delete;create;watch
 //+kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create

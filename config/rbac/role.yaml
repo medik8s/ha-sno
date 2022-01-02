@@ -7,32 +7,6 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - app.hasno.com
-  resources:
-  - halayersets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - app.hasno.com
-  resources:
-  - halayersets/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - app.hasno.com
-  resources:
-  - halayersets/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
   - apps
   resources:
   - deployments
@@ -74,6 +48,32 @@ rules:
   - list
   - update
   - watch
+- apiGroups:
+  - ha-sno.medik8s.io
+  resources:
+  - halayersets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ha-sno.medik8s.io
+  resources:
+  - halayersets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - ha-sno.medik8s.io
+  resources:
+  - halayersets/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:

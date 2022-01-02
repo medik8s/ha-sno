@@ -18,7 +18,7 @@ webhooks:
   name: vhalayerset.kb.io
   rules:
   - apiGroups:
-    - app.hasno.com
+    - ha-sno.medik8s.io
     apiVersions:
     - v1alpha1
     operations:

@@ -6,9 +6,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: halayersets.app.hasno.com
+  name: halayersets.ha-sno.medik8s.io
 spec:
-  group: app.hasno.com
+  group: ha-sno.medik8s.io
   names:
     kind: HALayerSet
     listKind: HALayerSetList
