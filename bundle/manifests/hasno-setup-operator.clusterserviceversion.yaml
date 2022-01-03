@@ -53,6 +53,7 @@ metadata:
     capabilities: Basic Install
     operators.operatorframework.io/builder: operator-sdk-v1.7.1+git
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
+    operatorframework.io/suggested-namespace: ha-sno
   name: hasno-setup-operator.v0.0.1
   namespace: placeholder
 spec:
