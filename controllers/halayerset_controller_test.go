@@ -178,6 +178,7 @@ var _ = Describe("High Availability Layer Set CR", func() {
 })
 
 func verifyCmdCommands(action userAction) {
+	//allow some time for async remediation call to complete
 	time.Sleep(time.Second * 2)
 	switch action {
 	case doNothing:
@@ -217,18 +218,10 @@ func verifyCmdCommands(action userAction) {
 			{"pcs", "resource", "remove", updatedFenceAgentName, "--force"},
 			{"pcs", "resource", "remove", secondOrgFenceAgent, "--force"},
 		}
-		//debug()
 		verifyExpectedCommands(expectedCommands)
 		verifyNoUnExpectedCommand(forbiddenCommands)
 	}
 
-}
-
-func debug() {
-	for i := 0; i < 30; i++ {
-		time.Sleep(time.Second)
-	}
-	fmt.Println("Done")
 }
 
 func verifyExpectedCommands(expectedCommands [][]string) {
@@ -337,11 +330,6 @@ func verifyCRIsCreated() bool {
 		}, time.Second*10, time.Millisecond*10).Should(BeTrue())
 }
 
-func cleanExecCommandsChannel() {
-	execCmdCommands = make(chan []string, 1000)
-	actualCommands = nil
-	Consistently(func() int { return len(execCmdCommands) }, time.Second, time.Millisecond*10).Should(BeEquivalentTo(0))
-}
 
 func cleanUp() {
 	Eventually(deleteHALayerCR, time.Second*2, time.Millisecond*10).ShouldNot(HaveOccurred())

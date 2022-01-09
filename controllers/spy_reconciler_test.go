@@ -10,10 +10,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"time"
 )
 
+const (
+	commandsChannelSize = 1000
+)
 var (
-	execCmdCommands = make(chan []string, 1000)
+	execCmdCommands = make(chan []string, commandsChannelSize)
 	actualCommands  [][]string
 )
 
@@ -96,4 +100,10 @@ func (r *mockPacemakerCommandHandler) postDeploymentDeleteHook() {
 	} else {
 		Expect(errors.IsNotFound(err)).To(BeTrue())
 	}
+}
+
+func cleanExecCommandsChannel() {
+	execCmdCommands = make(chan []string, commandsChannelSize)
+	actualCommands = nil
+	Consistently(func() int { return len(execCmdCommands) }, time.Second, time.Millisecond*10).Should(BeEquivalentTo(0))
 }
