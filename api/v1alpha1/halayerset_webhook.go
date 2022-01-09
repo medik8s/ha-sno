@@ -69,7 +69,7 @@ func (r *HALayerSet) SetupWebhookWithManager(mgr ctrl.Manager) error {
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-app-hasno-com-v1alpha1-halayerset,mutating=false,failurePolicy=fail,sideEffects=None,groups=ha-sno.medik8s.io,resources=halayersets,verbs=create;update,versions=v1alpha1,name=vhalayerset.kb.io,admissionReviewVersions={v1,v1beta1}
+//+kubebuilder:webhook:path=/validate-ha-sno-medik8s-io-v1alpha1-halayerset,mutating=false,failurePolicy=fail,sideEffects=None,groups=ha-sno.medik8s.io,resources=halayersets,verbs=create;update,versions=v1alpha1,name=vhalayerset.kb.io,admissionReviewVersions={v1,v1beta1}
 
 var _ webhook.Validator = &HALayerSet{}
 

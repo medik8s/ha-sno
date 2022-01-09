@@ -51,9 +51,9 @@ metadata:
         }
       ]
     capabilities: Basic Install
+    operatorframework.io/suggested-namespace: ha-sno
     operators.operatorframework.io/builder: operator-sdk-v1.7.1+git
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
-    operatorframework.io/suggested-namespace: ha-sno
   name: hasno-setup-operator.v0.0.1
   namespace: placeholder
 spec:
@@ -315,4 +315,4 @@ spec:
     sideEffects: None
     targetPort: 9443
     type: ValidatingAdmissionWebhook
-    webhookPath: /validate-app-hasno-com-v1alpha1-halayerset
+    webhookPath: /validate-ha-sno-medik8s-io-v1alpha1-halayerset

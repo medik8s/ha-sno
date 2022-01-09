@@ -13,7 +13,7 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-app-hasno-com-v1alpha1-halayerset
+      path: /validate-ha-sno-medik8s-io-v1alpha1-halayerset
   failurePolicy: Fail
   name: vhalayerset.kb.io
   rules:
