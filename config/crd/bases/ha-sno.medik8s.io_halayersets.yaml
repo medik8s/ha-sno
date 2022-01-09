@@ -100,6 +100,33 @@ spec:
             type: object
           status:
             description: HALayerSetStatus defines the observed state of HALayerSet
+            properties:
+              prevFenceAgentsSpec:
+                description: PrevFenceAgentsSpec reflects the previous status of the
+                  Fence Agents - in order to be able to compare to the current state
+                  and decide whether an action is required
+                items:
+                  description: FenceAgentSpec contains the necessary information for
+                    setting up the fence agent that will be used in the HA layer.
+                  properties:
+                    name:
+                      description: Name fence agent name.
+                      type: string
+                    params:
+                      additionalProperties:
+                        type: string
+                      description: 'Params parameters which are necessary when creating
+                        the fence agent, will be applied in the format: key1=value1
+                        key2=value2 ...'
+                      type: object
+                    type:
+                      description: Type of the fence agent.
+                      type: string
+                  required:
+                  - name
+                  - type
+                  type: object
+                type: array
             type: object
         type: object
     served: true

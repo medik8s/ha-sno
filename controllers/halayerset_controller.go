@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"net/http"
 	"os"
+	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -178,6 +179,10 @@ func (r *HALayerSetReconciler) initialize(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, err
 		}
 
+		if err := r.updatePrevFenceSpec(ctx, hals); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		if err = r.createDeployments(hals.Spec.Deployments, hals.Namespace); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -198,6 +203,22 @@ func (r *HALayerSetReconciler) addFinalizer(ctx context.Context, hals *appv1alph
 			return err
 		}
 	}
+	return nil
+}
+
+func (r *HALayerSetReconciler) updatePrevFenceSpec(ctx context.Context, hals *appv1alpha1.HALayerSet) error {
+
+	if reflect.DeepEqual(hals.Spec.FenceAgentsSpec, hals.Status.PrevFenceAgentsSpec) {
+		return nil
+	}
+
+	hals.Status.PrevFenceAgentsSpec = hals.Spec.FenceAgentsSpec
+
+	if err := r.Status().Update(ctx, hals); err != nil {
+		r.Log.Error(err, "failed to update PrevFenceAgentsSpec on HALayerSet resource")
+		return err
+	}
+
 	return nil
 }
 
@@ -590,6 +611,10 @@ func (r *HALayerSetReconciler) update(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	if err := r.updatePrevFenceSpec(ctx, hals); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if err := r.reconcileDeployments(hals); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -623,7 +648,7 @@ func (r *HALayerSetReconciler) reconcileFenceAgents(hals *appv1alpha1.HALayerSet
 
 	deleteCandidates := r.getElementsOnlyInSecondMap(expectedFenceAgent, actualFenceAgents)
 	newCreateCandidates := r.getElementsOnlyInSecondMap(actualFenceAgents, expectedFenceAgent)
-
+	updateCandidate := r.getMapsIntersection(actualFenceAgents, expectedFenceAgent)
 	if len(newCreateCandidates) == 0 {
 		r.Log.Info("no fence agents to create")
 	}
@@ -641,6 +666,18 @@ func (r *HALayerSetReconciler) reconcileFenceAgents(hals *appv1alpha1.HALayerSet
 	for _, fenceAgentNameToCreate := range newCreateCandidates {
 		if err := r.createFenceAgent(r.getFenceAgentByName(fenceAgentNameToCreate, hals), hals.Namespace); err != nil {
 			return err
+		}
+	}
+
+	for _, fenceAgentNameToUpdate := range updateCandidate {
+		isModified, err := r.isFenceAgentModified(fenceAgentNameToUpdate, hals)
+		if err != nil {
+			return err
+		}
+		if isModified {
+			if err := r.updateFenceAgent(r.getFenceAgentByName(fenceAgentNameToUpdate, hals), hals.Namespace); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -674,6 +711,7 @@ func (r *HALayerSetReconciler) reconcileDeployments(hals *appv1alpha1.HALayerSet
 		expectedDeployments[dep] = struct{}{}
 	}
 	createCandidateDeployments, deleteCandidateDeployments := r.getElementsOnlyInSecondMap(actualDeployments, expectedDeployments), r.getElementsOnlyInSecondMap(expectedDeployments, actualDeployments)
+
 	if err := r.createDeployments(createCandidateDeployments, hals.Namespace); err != nil {
 		return err
 	}
@@ -692,6 +730,17 @@ func (r *HALayerSetReconciler) getElementsOnlyInSecondMap(firstMap map[string]st
 		}
 	}
 	return elementOnlyInSecondMap
+}
+
+func (r *HALayerSetReconciler) getMapsIntersection(firstMap map[string]struct{}, secondMap map[string]struct{}) []string {
+	var elementOnlyInBothMaps []string
+
+	for secondMapElement := range secondMap {
+		if _, isExist := firstMap[secondMapElement]; isExist {
+			elementOnlyInBothMaps = append(elementOnlyInBothMaps, secondMapElement)
+		}
+	}
+	return elementOnlyInBothMaps
 }
 
 func (r *HALayerSetReconciler) verifyCRNamespace(actualNamespace string) (bool, error) {
@@ -734,4 +783,53 @@ func (r *HALayerSetReconciler) createFenceAgent(agent appv1alpha1.FenceAgentSpec
 		return err
 	}
 	return nil
+}
+
+func (r *HALayerSetReconciler) updateFenceAgent(agent appv1alpha1.FenceAgentSpec, namespace string) error {
+	command := []string{"pcs", "stonith", "update", agent.Name}
+	//append fence agent params to command
+	for key, val := range agent.Params {
+		command = append(command, fmt.Sprintf("%s=%s", key, val))
+	}
+
+	if pod, err := r.getHAPod(namespace); err == nil {
+		_, _, err := r.execCmdOnPacemaker(command, pod)
+		if err != nil {
+			r.Log.Error(err, "Can't update fence agent on HA Layer pod", "HA Layer pod template name", haLayerPodTemplateName, "fence agent name", agent.Name, "fence agent type", agent.Type)
+			return err
+		}
+		r.Log.Info("fence agent updated", "fence agent name", agent.Name, "fence agent type", agent.Type)
+	} else {
+		return err
+	}
+	return nil
+}
+
+func (r *HALayerSetReconciler) isFenceAgentModified(fenceAgentName string, hals *appv1alpha1.HALayerSet) (bool, error) {
+
+	if hals.Status.PrevFenceAgentsSpec == nil {
+		return true, nil
+	}
+
+	var prevStatus, currStatus *appv1alpha1.FenceAgentSpec
+	for _, agent := range hals.Status.PrevFenceAgentsSpec {
+		if agent.Name == fenceAgentName {
+			prevStatus = &agent
+			break
+		}
+	}
+	for _, agent := range hals.Spec.FenceAgentsSpec {
+		if agent.Name == fenceAgentName {
+			currStatus = &agent
+			break
+		}
+	}
+	if prevStatus == nil || currStatus == nil {
+		err := fmt.Errorf("fence agent not found in CR")
+		r.Log.Error(err, "fence agent not found in CR", "fence agent name", fenceAgentName)
+		return false, err
+	}
+	isModified := !reflect.DeepEqual(prevStatus, currStatus)
+	return isModified, nil
+
 }
