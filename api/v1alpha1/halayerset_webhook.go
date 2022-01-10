@@ -33,12 +33,16 @@ const (
 )
 
 const (
-	nodeNameChangeErrorMsg = "not allowed to change node name"
-	nodeIpChangeErrorMsg   = "not allowed to change node IP"
+	nodeNameChangeErrorMsg          = "not allowed to change node name"
+	nodeIpChangeErrorMsg            = "not allowed to change node IP"
+	duplicateFenceAgentNameErrorMsg = "not allowed to have multiple fence agents with the same name"
 )
 
 // log is for logging in this package.
-var halayersetlog = logf.Log.WithName("halayerset-resource")
+var (
+	halayersetlog       = logf.Log.WithName("halayerset-resource")
+	setValuePlaceHolder = struct{}{}
+)
 
 func (r *HALayerSet) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
@@ -76,8 +80,9 @@ var _ webhook.Validator = &HALayerSet{}
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *HALayerSet) ValidateCreate() error {
 	halayersetlog.Info("validate create", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object creation.
+	if err := validateFenceAgentUniqueness(r); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -86,6 +91,26 @@ func (r *HALayerSet) ValidateUpdate(old runtime.Object) error {
 	halayersetlog.Info("validate update", "name", r.Name)
 	oldCR := old.(*HALayerSet)
 
+	if err := validateFenceAgentUniqueness(r); err != nil {
+		return err
+	}
+
+	if err := validateNodeSpecs(oldCR, r); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
+func (r *HALayerSet) ValidateDelete() error {
+	halayersetlog.Info("validate delete", "name", r.Name)
+
+	// TODO(user): fill in your validation logic upon object deletion.
+	return nil
+}
+
+func validateNodeSpecs(oldCR *HALayerSet, r *HALayerSet) error {
 	if oldCR.Spec.NodesSpec.FirstNodeName != r.Spec.NodesSpec.FirstNodeName {
 		err := fmt.Errorf(nodeNameChangeErrorMsg)
 		halayersetlog.Error(err, nodeNameChangeErrorMsg, "original node name", oldCR.Spec.NodesSpec.FirstNodeName, "new node name", r.Spec.NodesSpec.FirstNodeName)
@@ -106,10 +131,19 @@ func (r *HALayerSet) ValidateUpdate(old runtime.Object) error {
 	return nil
 }
 
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *HALayerSet) ValidateDelete() error {
-	halayersetlog.Info("validate delete", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object deletion.
+func validateFenceAgentUniqueness(r *HALayerSet) error {
+	if len(r.Spec.FenceAgentsSpec) < 2 {
+		return nil
+	}
+	fenceAgentsNameSet := make(map[string]struct{})
+	for _, spec := range r.Spec.FenceAgentsSpec {
+		fenceAgentName := spec.Name
+		if _, isAlreadyExist := fenceAgentsNameSet[fenceAgentName]; isAlreadyExist {
+			err := fmt.Errorf(duplicateFenceAgentNameErrorMsg)
+			halayersetlog.Error(err, "fence agent exist with a duplicate name", "name", fenceAgentName)
+			return err
+		}
+		fenceAgentsNameSet[fenceAgentName] = setValuePlaceHolder
+	}
 	return nil
 }
