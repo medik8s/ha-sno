@@ -22,8 +22,39 @@ import (
 )
 
 var _ = Describe("HALayerSet Validation", func() {
+	Describe("create HALayerSet", func() {
+		Context("add fence agents with unique names", func() {
+			It("should succeed", func() {
+				haNew := createHALayerSetCR()
+				Expect(haNew.ValidateCreate()).NotTo(HaveOccurred())
+			})
+
+		})
+		Context("add same fence agent name twice", func() {
+
+			It("should fail", func() {
+				haNew := createHALayerSetCR()
+				haNew.Spec.FenceAgentsSpec[1].Name = haNew.Spec.FenceAgentsSpec[0].Name
+				err := haNew.ValidateCreate()
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(duplicateFenceAgentNameErrorMsg))
+			})
+
+		})
+	})
 
 	Describe("updating HALayerSet", func() {
+		Context("add same fence agent name twice", func() {
+
+			It("should fail", func() {
+				haOld, haNew := createHALayerSetCR(), createHALayerSetCR()
+				haNew.Spec.FenceAgentsSpec[1].Name = haNew.Spec.FenceAgentsSpec[0].Name
+				err := haNew.ValidateUpdate(haOld)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(duplicateFenceAgentNameErrorMsg))
+			})
+
+		})
 
 		Context("removing deployment", func() {
 
@@ -81,8 +112,9 @@ func createHALayerSetCR() *HALayerSet {
 	ha := &HALayerSet{}
 	ha.Name = "test"
 	ha.Namespace = "default"
-	fenceAgent := FenceAgentSpec{Name: "mock-fence-org", Type: "fence_mock", Params: map[string]string{}}
-	ha.Spec = HALayerSetSpec{FenceAgentsSpec: []FenceAgentSpec{fenceAgent}}
+	firstFenceAgent := FenceAgentSpec{Name: "first-mock-fence-org", Type: "fence_mock", Params: map[string]string{}}
+	secondFenceAgent := FenceAgentSpec{Name: "second-mock-fence-org", Type: "fence_mock", Params: map[string]string{}}
+	ha.Spec = HALayerSetSpec{FenceAgentsSpec: []FenceAgentSpec{firstFenceAgent, secondFenceAgent}}
 	ha.Spec.NodesSpec = NodesSpec{FirstNodeName: "cluster1", FirstNodeIP: "192.168.126.10", SecondNodeName: "cluster2", SecondNodeIP: "192.168.126.11"}
 	ha.Spec.Deployments = []string{"test-dep1", "test-dep2"}
 	return ha
