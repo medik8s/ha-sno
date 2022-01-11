@@ -1,4 +1,4 @@
-module github.com/mshitrit/hasno-setup-operator
+module github.com/medik8s/ha-sno
 
 go 1.15
 

@@ -3,8 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/mshitrit/hasno-setup-operator/api/v1alpha1"
-	appv1alpha1 "github.com/mshitrit/hasno-setup-operator/api/v1alpha1"
+	"github.com/medik8s/ha-sno/api/v1alpha1"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -26,7 +25,7 @@ func (r *SpyHALayerSetReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func (r *SpyHALayerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.HALayerSetReconciler.pacemakerCommandHandler = &mockPacemakerCommandHandler{}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&appv1alpha1.HALayerSet{}).
+		For(&v1alpha1.HALayerSet{}).
 		Complete(r)
 }
 

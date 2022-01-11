@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-logr/logr"
-	appv1alpha1 "github.com/mshitrit/hasno-setup-operator/api/v1alpha1"
+	"github.com/medik8s/ha-sno/api/v1alpha1"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -66,7 +66,7 @@ const (
 
 var (
 	haPodLabels    = map[string]string{"app": haClusterName}
-	haSnoFinalizer = fmt.Sprintf("%s/finalizer", appv1alpha1.GroupVersion.Group)
+	haSnoFinalizer = fmt.Sprintf("%s/finalizer", v1alpha1.GroupVersion.Group)
 )
 
 type Scenario int
@@ -99,7 +99,7 @@ func (r *HALayerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	var hals *appv1alpha1.HALayerSet
+	var hals *v1alpha1.HALayerSet
 	hals, err = r.getHals(ctx, req)
 	if err != nil || hals == nil {
 		return ctrl.Result{}, err
@@ -133,8 +133,8 @@ func (r *HALayerSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 }
 
-func (r *HALayerSetReconciler) getHals(ctx context.Context, req ctrl.Request) (*appv1alpha1.HALayerSet, error) {
-	hals := new(appv1alpha1.HALayerSet)
+func (r *HALayerSetReconciler) getHals(ctx context.Context, req ctrl.Request) (*v1alpha1.HALayerSet, error) {
+	hals := new(v1alpha1.HALayerSet)
 	key := client.ObjectKey{Name: req.Name, Namespace: req.Namespace}
 	err := r.Client.Get(ctx, key, hals)
 	if err != nil {
@@ -190,7 +190,7 @@ func createPodTemplateNameFromCRName(halsCRName string) string {
 	return fmt.Sprintf("%s-%s", halsCRName, podNameHALayerSuffix)
 }
 
-func (r *HALayerSetReconciler) addFinalizer(ctx context.Context, hals *appv1alpha1.HALayerSet) error {
+func (r *HALayerSetReconciler) addFinalizer(ctx context.Context, hals *v1alpha1.HALayerSet) error {
 	if !controllerutil.ContainsFinalizer(hals, haSnoFinalizer) {
 		controllerutil.AddFinalizer(hals, haSnoFinalizer)
 		if err := r.Update(ctx, hals); err != nil {
@@ -227,7 +227,7 @@ func (r *HALayerSetReconciler) deletion(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{}, nil
 }
 
-func (r *HALayerSetReconciler) removeFinalizer(hals *appv1alpha1.HALayerSet) error {
+func (r *HALayerSetReconciler) removeFinalizer(hals *v1alpha1.HALayerSet) error {
 	controllerutil.RemoveFinalizer(hals, haSnoFinalizer)
 	if err := r.Update(context.Background(), hals); err != nil {
 		r.Log.Error(err, "failed to remove finalizer from HALayerSet CR")
@@ -276,7 +276,7 @@ func (r *HALayerSetReconciler) getHADeployment(namespace string, isLogNotFound b
 	return haDeployment, nil
 }
 
-func (r *HALayerSetReconciler) createHADeployment(hals *appv1alpha1.HALayerSet) error {
+func (r *HALayerSetReconciler) createHADeployment(hals *v1alpha1.HALayerSet) error {
 	nodeName, err := r.getNodeName()
 	if err != nil {
 		return err
@@ -311,7 +311,7 @@ func (r *HALayerSetReconciler) getHADeploymentName() string {
 	return fmt.Sprintf("%s-deployment", haLayerPodTemplateName)
 }
 
-func (r *HALayerSetReconciler) buildHALayerPod(hals *appv1alpha1.HALayerSet, nodeName string) *corev1.Pod {
+func (r *HALayerSetReconciler) buildHALayerPod(hals *v1alpha1.HALayerSet, nodeName string) *corev1.Pod {
 	pod := &corev1.Pod{}
 	pod.Namespace = hals.Namespace
 	pod.Labels = haPodLabels
@@ -396,7 +396,7 @@ func (r *HALayerSetReconciler) deleteHAService(namespace string) error {
 	return nil
 }
 
-func (r *HALayerSetReconciler) createHAService(hals *appv1alpha1.HALayerSet) error {
+func (r *HALayerSetReconciler) createHAService(hals *v1alpha1.HALayerSet) error {
 
 	service := &corev1.Service{}
 	r.setUpServiceData(hals, service)
@@ -426,7 +426,7 @@ func (r *HALayerSetReconciler) createHAService(hals *appv1alpha1.HALayerSet) err
 	return nil
 }
 
-func (r *HALayerSetReconciler) setUpServiceData(hals *appv1alpha1.HALayerSet, service *corev1.Service) {
+func (r *HALayerSetReconciler) setUpServiceData(hals *v1alpha1.HALayerSet, service *corev1.Service) {
 	service.Namespace = hals.Namespace
 
 	service.Name = serviceName
@@ -440,7 +440,7 @@ func (r *HALayerSetReconciler) setUpServiceData(hals *appv1alpha1.HALayerSet, se
 	service.Spec.Ports = ports
 }
 
-func (r *HALayerSetReconciler) createHALayer(hals *appv1alpha1.HALayerSet) error {
+func (r *HALayerSetReconciler) createHALayer(hals *v1alpha1.HALayerSet) error {
 	if err := r.createHAService(hals); err != nil {
 		return err
 	}
@@ -465,7 +465,7 @@ func (r *HALayerSetReconciler) deleteHALayer(namespace string) error {
 // SetupWithManager sets up the controller with the Manager.
 func (r *HALayerSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&appv1alpha1.HALayerSet{}).
+		For(&v1alpha1.HALayerSet{}).
 		Complete(r)
 }
 
@@ -512,7 +512,7 @@ func (r *HALayerSetReconciler) getHAPod(namespace string) (*corev1.Pod, error) {
 	return &pods.Items[0], nil
 
 }
-func (r *HALayerSetReconciler) verifyPodIsRunning(hals *appv1alpha1.HALayerSet) (ctrl.Result, error) {
+func (r *HALayerSetReconciler) verifyPodIsRunning(hals *v1alpha1.HALayerSet) (ctrl.Result, error) {
 	dep, err := r.getHADeployment(hals.Namespace, true)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -556,7 +556,7 @@ func (r *HALayerSetReconciler) getNodeName() (string, error) {
 	return podList.Items[0].Spec.NodeName, nil
 }
 
-func (r *HALayerSetReconciler) getScenario(hals *appv1alpha1.HALayerSet) (Scenario, error) {
+func (r *HALayerSetReconciler) getScenario(hals *v1alpha1.HALayerSet) (Scenario, error) {
 	if _, err := r.getHADeployment(hals.Namespace, false); err == nil { //HA Deployment and exist and CR exist - update scenario
 		isHalsMarkedToBeDeleted := hals.GetDeletionTimestamp() != nil
 		if isHalsMarkedToBeDeleted {
@@ -597,8 +597,8 @@ func (r *HALayerSetReconciler) update(ctx context.Context, req ctrl.Request) (ct
 	return ctrl.Result{}, nil
 }
 
-func (r *HALayerSetReconciler) getHALayerSet(ctx context.Context, req ctrl.Request) (*appv1alpha1.HALayerSet, error) {
-	hals := new(appv1alpha1.HALayerSet)
+func (r *HALayerSetReconciler) getHALayerSet(ctx context.Context, req ctrl.Request) (*v1alpha1.HALayerSet, error) {
+	hals := new(v1alpha1.HALayerSet)
 	key := client.ObjectKey{Name: req.Name, Namespace: req.Namespace}
 	if err := r.Client.Get(ctx, key, hals); err != nil {
 		r.Log.Error(err, "failed to fetch HALayerSet CR", "HALayerSet Name", req.Name, "Namespace", req.Namespace)
@@ -607,7 +607,7 @@ func (r *HALayerSetReconciler) getHALayerSet(ctx context.Context, req ctrl.Reque
 	return hals, nil
 }
 
-func (r *HALayerSetReconciler) reconcileFenceAgents(hals *appv1alpha1.HALayerSet) error {
+func (r *HALayerSetReconciler) reconcileFenceAgents(hals *v1alpha1.HALayerSet) error {
 
 	actualFenceAgents, err := r.getFenceAgentNames(hals.Namespace)
 	if err != nil {
@@ -647,9 +647,9 @@ func (r *HALayerSetReconciler) reconcileFenceAgents(hals *appv1alpha1.HALayerSet
 	return nil
 }
 
-func (r *HALayerSetReconciler) getFenceAgentByName(name string, hals *appv1alpha1.HALayerSet) appv1alpha1.FenceAgentSpec {
+func (r *HALayerSetReconciler) getFenceAgentByName(name string, hals *v1alpha1.HALayerSet) v1alpha1.FenceAgentSpec {
 
-	var fenceAgentToCreate appv1alpha1.FenceAgentSpec
+	var fenceAgentToCreate v1alpha1.FenceAgentSpec
 	for _, fenceAgent := range hals.Spec.FenceAgentsSpec {
 		if fenceAgent.Name == name {
 			fenceAgentToCreate = fenceAgent
@@ -659,7 +659,7 @@ func (r *HALayerSetReconciler) getFenceAgentByName(name string, hals *appv1alpha
 	return fenceAgentToCreate
 }
 
-func (r *HALayerSetReconciler) reconcileDeployments(hals *appv1alpha1.HALayerSet) error {
+func (r *HALayerSetReconciler) reconcileDeployments(hals *v1alpha1.HALayerSet) error {
 	actualDeployments, expectedDeployments := map[string]struct{}{}, map[string]struct{}{}
 	resources, err := r.getHALayerResources(hals.Namespace)
 	if err != nil {
@@ -716,7 +716,7 @@ func (r *HALayerSetReconciler) initPcsCommandHandler() {
 	}
 }
 
-func (r *HALayerSetReconciler) createFenceAgent(agent appv1alpha1.FenceAgentSpec, namespace string) error {
+func (r *HALayerSetReconciler) createFenceAgent(agent v1alpha1.FenceAgentSpec, namespace string) error {
 	command := []string{"pcs", "stonith", "create", agent.Name, agent.Type}
 	//append fence agent params to command
 	for key, val := range agent.Params {

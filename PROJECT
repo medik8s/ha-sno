@@ -5,7 +5,7 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: hasno-setup-operator
-repo: github.com/mshitrit/hasno-setup-operator
+repo: github.com/medik8s/ha-sno
 resources:
 - api:
     crdVersion: v1
@@ -14,7 +14,7 @@ resources:
   domain: medik8s.io
   group: ha-sno
   kind: HALayerSet
-  path: github.com/mshitrit/hasno-setup-operator/api/v1alpha1
+  path: github.com/medik8s/ha-sno/api/v1alpha1
   version: v1alpha1
   webhooks:
     validation: true
