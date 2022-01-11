@@ -3,7 +3,7 @@ package controllers
 import (
 	"encoding/xml"
 	"fmt"
-	appv1alpha1 "github.com/mshitrit/hasno-setup-operator/api/v1alpha1"
+	"github.com/medik8s/ha-sno/api/v1alpha1"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -77,7 +77,7 @@ func (r *HALayerSetReconciler) getHALayerResources(namespace string) (*resources
 	}
 }
 
-func (r *HALayerSetReconciler) isAllowedToModify(hals *appv1alpha1.HALayerSet) (bool, error, ctrl.Result) {
+func (r *HALayerSetReconciler) isAllowedToModify(hals *v1alpha1.HALayerSet) (bool, error, ctrl.Result) {
 	nodeName, err := r.getNodeName()
 	if err != nil {
 		return false, err, ctrl.Result{}
@@ -137,7 +137,7 @@ func (r *HALayerSetReconciler) isPeerActive(namespace string) (bool, error) {
 		return haNodes[0].isOnline() && haNodes[1].isOnline(), nil
 	}
 }
-func (r *HALayerSetReconciler) isMainNode(hals *appv1alpha1.HALayerSet, nodeName string) bool {
+func (r *HALayerSetReconciler) isMainNode(hals *v1alpha1.HALayerSet, nodeName string) bool {
 	isFirstNode := nodeName <= hals.Spec.NodesSpec.FirstNodeName && nodeName <= hals.Spec.NodesSpec.SecondNodeName
 	return isFirstNode
 }
@@ -251,7 +251,7 @@ func (r *HALayerSetReconciler) removeResource(resourceName string, namespace str
 	return nil
 }
 
-func (r *HALayerSetReconciler) createFenceAgents(hals *appv1alpha1.HALayerSet) error {
+func (r *HALayerSetReconciler) createFenceAgents(hals *v1alpha1.HALayerSet) error {
 	for _, fenceAgent := range hals.Spec.FenceAgentsSpec {
 		if err := r.createFenceAgent(fenceAgent, hals.Namespace); err != nil {
 			return err

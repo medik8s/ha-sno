@@ -31,8 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	appv1alpha1 "github.com/mshitrit/hasno-setup-operator/api/v1alpha1"
-	"github.com/mshitrit/hasno-setup-operator/controllers"
+	appv1alpha1 "github.com/medik8s/ha-sno/api/v1alpha1"
+	"github.com/medik8s/ha-sno/controllers"
 	//+kubebuilder:scaffold:imports
 )
 
