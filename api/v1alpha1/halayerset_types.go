@@ -36,6 +36,9 @@ type HALayerSetSpec struct {
 
 	//NodesSpec contain names and ips of both SNO clusters nodes.
 	NodesSpec NodesSpec `json:"nodesSpec"`
+
+	//ContainerImage this image will be used by the HALayer pod to set up the pacemaker container which also contains the fencing agents - if left empty a default one will be used.
+	ContainerImage string `json:"containerImage,omitempty"`
 }
 
 // FenceAgentSpec contains the necessary information for setting up the fence agent that will be used in the HA layer.

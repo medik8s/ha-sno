@@ -105,6 +105,17 @@ var _ = Describe("HALayerSet Validation", func() {
 			})
 
 		})
+
+		Context("changing container image", func() {
+			It("should fail", func() { //First Node IP
+				haOld, haNew := createHALayerSetCR(), createHALayerSetCR()
+				haNew.Spec.ContainerImage = "io.quay/mock-new-image/0.0.1"
+				err := haNew.ValidateUpdate(haOld)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(containerImageChangeErrorMsg))
+			})
+
+		})
 	})
 })
 
