@@ -9,9 +9,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"time"
 )
 
-var execCmdCommands = make(chan execCmdCommand, 1000)
+const (
+	commandsChannelSize = 1000
+)
+var (
+	execCmdCommands = make(chan []string, commandsChannelSize)
+	actualCommands  [][]string
+)
 
 type SpyHALayerSetReconciler struct {
 	*HALayerSetReconciler
@@ -37,17 +44,40 @@ func (r *mockPacemakerCommandHandler) isPodRunning(podPhase corev1.PodPhase) boo
 }
 
 func (r *mockPacemakerCommandHandler) execCmdOnPacemaker(command []string, pod *corev1.Pod) (stdout, stderr string, err error) {
-	execCmdCommands <- execCmdCommand{command, pod}
+	execCmdCommands <- command
 	return "", "", nil
 }
 
 //Don't remove result, it is necessary in order to implement pacemakerCommandHandler
 func (r *mockPacemakerCommandHandler) extractHAStatus(result string) (*haStatus, error) {
 	h := new(haStatus)
+	var res []resource
+	commands := getActualCommands()
+	isUpdateCommandExecuted := false
+	for _, command := range commands {
+		if len(command) >= 4 {
+			if command[0] == "pcs" && command[1] == "stonith" && command[2] == "update" && command[3] == secondOrgFenceAgent {
+				isUpdateCommandExecuted = true
+				break
+			}
+		}
+	}
+	if isUpdateCommandExecuted {
+		res = []resource{
+			//{Id: firstOrgFenceAgent, ResourceAgent: fmt.Sprintf("%s:mock-fence-agent", pcsFenceIdentifier)},
+			{Id: updatedFenceAgentName, ResourceAgent: fmt.Sprintf("%s:%s", pcsFenceIdentifier, firstOrgFenceAgent)},
+			{Id: secondOrgFenceAgent, ResourceAgent: fmt.Sprintf("%s:%s", pcsFenceIdentifier, secondOrgFenceAgent)},
+		}
+	} else {
+		res = []resource{
+			//{Id: firstOrgFenceAgent, ResourceAgent: fmt.Sprintf("%s:mock-fence-agent", pcsFenceIdentifier)},
+			{Id: firstOrgFenceAgent, ResourceAgent: fmt.Sprintf("%s:%s", pcsFenceIdentifier, firstOrgFenceAgent)},
+			{Id: secondOrgFenceAgent, ResourceAgent: fmt.Sprintf("%s:%s", pcsFenceIdentifier, secondOrgFenceAgent)},
+		}
+
+	}
 	h.Resources = resources{
-		Resources: []resource{
-			{Id: originalFenceAgentName, ResourceAgent: fmt.Sprintf("%s:mock-fence-agent", pcsFenceIdentifier)},
-		}}
+		Resources: res}
 	return h, nil
 }
 
@@ -71,7 +101,8 @@ func (r *mockPacemakerCommandHandler) postDeploymentDeleteHook() {
 	}
 }
 
-type execCmdCommand struct {
-	command []string
-	pod     *corev1.Pod
+func cleanExecCommandsChannel() {
+	execCmdCommands = make(chan []string, commandsChannelSize)
+	actualCommands = nil
+	Consistently(func() int { return len(execCmdCommands) }, time.Second, time.Millisecond*10).Should(BeEquivalentTo(0))
 }

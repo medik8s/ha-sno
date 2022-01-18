@@ -15,13 +15,15 @@ import (
 )
 
 const (
-	defaultNamespace       = "default"
-	haLayerCRName          = "test"
-	node1Name              = "mock-cluster1-node"
-	node2Name              = "mock-cluster2-node"
-	originalFenceAgentName = "mock-fence-org"
-	fenceAgentType         = "fence_mock"
-	updatedFenceAgentName  = "mock-fence-changed"
+	defaultNamespace      = "default"
+	haLayerCRName         = "test"
+	node1Name             = "mock-cluster1-node"
+	node2Name             = "mock-cluster2-node"
+	firstOrgFenceAgent    = "mock-first-fence-org"
+	secondOrgFenceAgent   = "mock-second-fence-org"
+	fenceAgentType        = "fence_mock"
+	updatedFenceAgentName = "mock-fence-changed"
+	fenceAgentPortKey     = "ipport"
 )
 
 var (
@@ -85,7 +87,8 @@ var _ = Describe("High Availability Layer Set CR", func() {
 				existingCR, err := getHALayerCR()
 				Expect(err).To(BeNil())
 				fenceAgent := v1alpha1.FenceAgentSpec{Name: updatedFenceAgentName, Type: fenceAgentType, Params: map[string]string{}}
-				existingCR.Spec.FenceAgentsSpec = []v1alpha1.FenceAgentSpec{fenceAgent}
+				existingCR.Spec.FenceAgentsSpec[0] = fenceAgent                       //replace fence agent will trigger delete and create
+				existingCR.Spec.FenceAgentsSpec[1].Params[fenceAgentPortKey] = "9223" //modify fence agent param - will trigger update
 				Expect(k8sClient.Update(context.Background(), existingCR)).ToNot(HaveOccurred())
 
 			case doNothing:
@@ -175,52 +178,97 @@ var _ = Describe("High Availability Layer Set CR", func() {
 })
 
 func verifyCmdCommands(action userAction) {
+	//allow some time for async remediation call to complete
+	time.Sleep(time.Second * 2)
 	switch action {
 	case doNothing:
 		Eventually(func() int { return len(execCmdCommands) }, time.Second*10, time.Millisecond*10).Should(BeEquivalentTo(0))
 	case createCR:
-		Eventually(func() int { return len(execCmdCommands) }, time.Second*10, time.Millisecond*10).Should(BeEquivalentTo(1))
 		expectedCommands := [][]string{
-			{"pcs", "stonith", "create", originalFenceAgentName, fenceAgentType},
+			{"pcs", "stonith", "create", firstOrgFenceAgent, fenceAgentType},
 		}
-		verifyExpectedCommands(expectedCommands)
-	case deleteCR:
-		Eventually(func() int { return len(execCmdCommands) }, time.Second*10, time.Millisecond*10).Should(BeEquivalentTo(3))
-		expectedCommands := [][]string{
-			{"pcs", "status", "xml"},
-			{"pcs", "stonith", "create", originalFenceAgentName, fenceAgentType},
-			{"pcs", "resource", "remove", originalFenceAgentName, "--force"},
-		}
-		verifyExpectedCommands(expectedCommands)
-	case updateCR:
-		Eventually(func() int { return len(execCmdCommands) }, time.Second*10, time.Millisecond*10).Should(BeEquivalentTo(5))
-		expectedCommands := [][]string{
-			{"pcs", "stonith", "create", originalFenceAgentName, fenceAgentType},
-			{"pcs", "status", "xml"}, //appears twice
-			{"pcs", "resource", "remove", originalFenceAgentName, "--force"},
+		forbiddenCommands := [][]string{
+			{"pcs", "resource", "remove"},
 			{"pcs", "stonith", "create", updatedFenceAgentName, fenceAgentType},
 		}
 		verifyExpectedCommands(expectedCommands)
+		verifyNoUnExpectedCommand(forbiddenCommands)
+	case deleteCR:
+		expectedCommands := [][]string{
+			{"pcs", "status", "xml"},
+			{"pcs", "stonith", "create", firstOrgFenceAgent, fenceAgentType},
+			{"pcs", "resource", "remove", firstOrgFenceAgent, "--force"},
+		}
+		forbiddenCommands := [][]string{
+			{"pcs", "resource", "remove", updatedFenceAgentName, "--force"},
+			{"pcs", "stonith", "create", updatedFenceAgentName, fenceAgentType},
+		}
+		verifyExpectedCommands(expectedCommands)
+		verifyNoUnExpectedCommand(forbiddenCommands)
+	case updateCR:
+		expectedCommands := [][]string{
+			{"pcs", "stonith", "create", firstOrgFenceAgent, fenceAgentType},
+			{"pcs", "stonith", "create", secondOrgFenceAgent, fenceAgentType},
+			{"pcs", "status", "xml"}, //appears twice
+			{"pcs", "resource", "remove", firstOrgFenceAgent, "--force"},
+			{"pcs", "stonith", "create", updatedFenceAgentName, fenceAgentType},
+			{"pcs", "stonith", "update", secondOrgFenceAgent},
+		}
+		forbiddenCommands := [][]string{
+			{"pcs", "resource", "remove", updatedFenceAgentName, "--force"},
+			{"pcs", "resource", "remove", secondOrgFenceAgent, "--force"},
+		}
+		verifyExpectedCommands(expectedCommands)
+		verifyNoUnExpectedCommand(forbiddenCommands)
 	}
 
 }
 
 func verifyExpectedCommands(expectedCommands [][]string) {
-	var actualCommands [][]string
-	for len(execCmdCommands) > 0 {
-		actualCommand := <-execCmdCommands
-		actualCommands = append(actualCommands, actualCommand.command)
-	}
+	Eventually(isExpectedCommandsFound(expectedCommands), time.Second*10, time.Millisecond*10).Should(BeTrue())
+}
+
+func isExpectedCommandsFound(expectedCommands [][]string) bool {
 	for _, expectedCommand := range expectedCommands {
-		Expect(containsStringSlice(expectedCommand, actualCommands)).To(BeTrue())
+		if !containsStringSlice(expectedCommand, getActualCommands()) {
+			return false
+		}
+	}
+	return true
+}
+
+func getActualCommands() [][]string {
+
+	for len(execCmdCommands) > 0 {
+		actualCommands = append(actualCommands, <-execCmdCommands)
+	}
+
+	return actualCommands
+}
+
+func verifyNoUnExpectedCommand(forbiddenCommands [][]string) {
+	for _, forbiddenCommand := range forbiddenCommands {
+		for _, actualCommand := range getActualCommands() {
+			if len(actualCommand) >= len(forbiddenCommand) {
+				isForbiddenCommandPrefixMatch := true
+				for i := 0; i < len(forbiddenCommand); i++ {
+					if actualCommand[i] != forbiddenCommand[i] {
+						isForbiddenCommandPrefixMatch = false
+						break
+					}
+				}
+				Expect(isForbiddenCommandPrefixMatch).Should(BeFalse())
+
+			}
+		}
 	}
 }
 
 func containsStringSlice(expectedCommand []string, commands [][]string) bool {
 	for _, actualCommand := range commands {
-		if len(actualCommand) == len(expectedCommand) {
+		if len(actualCommand) >= len(expectedCommand) {
 			isCommandMatch := true
-			for i := 0; i < len(actualCommand); i++ {
+			for i := 0; i < len(expectedCommand); i++ {
 				if actualCommand[i] != expectedCommand[i] {
 					isCommandMatch = false
 					break
@@ -277,15 +325,11 @@ func verifyHAPodExist() bool {
 func verifyCRIsCreated() bool {
 	return Eventually(
 		func() bool {
-			_, err := getHALayerCR()
-			return err == nil
+			hals, err := getHALayerCR()
+			return err == nil && hals.Status.PrevFenceAgentsSpec != nil
 		}, time.Second*10, time.Millisecond*10).Should(BeTrue())
 }
 
-func cleanExecCommandsChannel() {
-	execCmdCommands = make(chan execCmdCommand, 1000)
-	Consistently(func() int { return len(execCmdCommands) }, time.Second, time.Millisecond*10).Should(BeEquivalentTo(0))
-}
 
 func cleanUp() {
 	Eventually(deleteHALayerCR, time.Second*2, time.Millisecond*10).ShouldNot(HaveOccurred())
@@ -312,8 +356,19 @@ func createHALayerSetCR() *v1alpha1.HALayerSet {
 	ha := &v1alpha1.HALayerSet{}
 	ha.Name = haLayerCRName
 	ha.Namespace = defaultNamespace
-	fenceAgent := v1alpha1.FenceAgentSpec{Name: originalFenceAgentName, Type: fenceAgentType, Params: map[string]string{}}
-	ha.Spec = v1alpha1.HALayerSetSpec{FenceAgentsSpec: []v1alpha1.FenceAgentSpec{fenceAgent}}
+
+	firstFenceAgent := v1alpha1.FenceAgentSpec{Name: firstOrgFenceAgent, Type: fenceAgentType, Params: map[string]string{}}
+	secondFenceAgent := v1alpha1.FenceAgentSpec{Name: secondOrgFenceAgent, Type: fenceAgentType,
+		Params: map[string]string{
+			"ip":              "192.168.126.1",
+			"username":        "admin",
+			"password":        "password",
+			fenceAgentPortKey: "9222",
+			"lanplus":         "1",
+			"pcmk_host_list":  "cluster2",
+		},
+	}
+	ha.Spec = v1alpha1.HALayerSetSpec{FenceAgentsSpec: []v1alpha1.FenceAgentSpec{firstFenceAgent, secondFenceAgent}}
 	ha.Spec.NodesSpec = v1alpha1.NodesSpec{FirstNodeName: node1Name, FirstNodeIP: "192.168.126.10", SecondNodeName: node2Name, SecondNodeIP: "192.168.126.11"}
 	ha.Finalizers = []string{haSnoFinalizer}
 	return ha

@@ -62,8 +62,8 @@ type NodesSpec struct {
 
 // HALayerSetStatus defines the observed state of HALayerSet
 type HALayerSetStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	//PrevFenceAgentsSpec reflects the previous status of the Fence Agents - in order to be able to compare to the current state and decide whether an action is required
+	PrevFenceAgentsSpec []FenceAgentSpec `json:"prevFenceAgentsSpec,omitempty"`
 }
 
 //+kubebuilder:object:root=true
