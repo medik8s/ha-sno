@@ -31,3 +31,4 @@ spec:
     firstNodeIP: "192.168.126.10"
     secondNodeName: "cluster2"
     secondNodeIP: "192.168.126.11"
+  containerImage: "quay.io/mshitrit/pcmk:v3"

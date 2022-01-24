@@ -63,6 +63,7 @@ const (
 	serviceAccountName = "hasno-setup-operator-aio-cluster-role"
 
 	deploymentNamespaceEnvVar = "DEPLOYMENT_NAMESPACE"
+	defaultContainerImage = "quay.io/mshitrit/pcmk:v3"
 )
 
 var (
@@ -353,8 +354,9 @@ func (r *HALayerSetReconciler) buildHALayerPod(hals *v1alpha1.HALayerSet, nodeNa
 		{IP: hals.Spec.NodesSpec.SecondNodeIP, Hostnames: []string{hals.Spec.NodesSpec.SecondNodeName}},
 	}
 	trueVal := true
+	containerImage := r.getContainerImage(hals)
 	pod.Spec.Containers = []corev1.Container{
-		{Name: "system", Image: "quay.io/mshitrit/pcmk:v3", ImagePullPolicy: corev1.PullAlways, Command: []string{"/usr/lib/systemd/systemd", "--system"},
+		{Name: "system", Image: containerImage, ImagePullPolicy: corev1.PullAlways, Command: []string{"/usr/lib/systemd/systemd", "--system"},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: "cluster-state", MountPath: "/var/lib/pcsd"},
 				{Name: "cluster-state", MountPath: "/etc/corosync"},
@@ -363,12 +365,12 @@ func (r *HALayerSetReconciler) buildHALayerPod(hals *v1alpha1.HALayerSet, nodeNa
 			SecurityContext: &corev1.SecurityContext{Privileged: &trueVal},
 		},
 
-		{Name: "corosync", Image: "quay.io/mshitrit/pcmk:v3", ImagePullPolicy: corev1.PullAlways, Command: []string{"/usr/sbin/corosync", "-f"},
+		{Name: "corosync", Image: containerImage, ImagePullPolicy: corev1.PullAlways, Command: []string{"/usr/sbin/corosync", "-f"},
 			VolumeMounts:    []corev1.VolumeMount{{Name: "cluster-state", MountPath: "/etc/corosync"}},
 			SecurityContext: &corev1.SecurityContext{Privileged: &trueVal},
 		},
 
-		{Name: "pacemaker", Image: "quay.io/mshitrit/pcmk:v3", ImagePullPolicy: corev1.PullAlways, Command: []string{"/usr/sbin/pacemakerd", "-f"},
+		{Name: "pacemaker", Image: containerImage, ImagePullPolicy: corev1.PullAlways, Command: []string{"/usr/sbin/pacemakerd", "-f"},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: "cluster-state", MountPath: "/etc/pacemaker"},
 				{Name: "cluster-state", MountPath: "/var/lib/pacemaker"},
@@ -378,7 +380,7 @@ func (r *HALayerSetReconciler) buildHALayerPod(hals *v1alpha1.HALayerSet, nodeNa
 	}
 
 	pod.Spec.InitContainers = []corev1.Container{
-		{Name: "init", Image: "quay.io/mshitrit/pcmk:v3", ImagePullPolicy: corev1.PullAlways, Command: []string{"/root/setup.sh"},
+		{Name: "init", Image: containerImage, ImagePullPolicy: corev1.PullAlways, Command: []string{"/root/setup.sh"},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: "cluster-state", MountPath: "/etc/corosync"},
 				{Name: "cluster-state", MountPath: "/etc/pacemaker"},
@@ -401,6 +403,22 @@ func (r *HALayerSetReconciler) buildHALayerPod(hals *v1alpha1.HALayerSet, nodeNa
 		},
 	}
 	return pod
+}
+
+func (r *HALayerSetReconciler) getContainerImage(hals *v1alpha1.HALayerSet) string {
+	var containerImage string
+	if len(hals.Spec.ContainerImage) > 0 {
+		containerImage = hals.Spec.ContainerImage
+	} else {
+		containerImage = defaultContainerImage
+	}
+
+	if containerImage == defaultContainerImage {
+		r.Log.Info("haLayer pod is using default container image", "image", containerImage)
+	} else {
+		r.Log.Info("haLayer pod is using a user customized container image", "image", containerImage)
+	}
+	return containerImage
 }
 
 func (r *HALayerSetReconciler) deleteHAService(namespace string) error {

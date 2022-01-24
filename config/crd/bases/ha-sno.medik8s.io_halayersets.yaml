@@ -36,6 +36,11 @@ spec:
           spec:
             description: HALayerSetSpec defines the desired state of HALayerSet
             properties:
+              containerImage:
+                description: ContainerImage this image will be used by the HALayer
+                  pod to set up the pacemaker container which also contains the fencing
+                  agents - if left empty a default one will be used.
+                type: string
               deployments:
                 description: Deployments is a list of deployments that will be managed
                   by the created HA layer.

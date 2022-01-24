@@ -11,6 +11,7 @@ metadata:
             "name": "halayerset-sample"
           },
           "spec": {
+            "containerImage": "quay.io/mshitrit/pcmk:v3",
             "deployments": [
               "nginx-test",
               "nginx-prod"

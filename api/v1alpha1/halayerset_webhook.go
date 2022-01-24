@@ -35,6 +35,7 @@ const (
 const (
 	nodeNameChangeErrorMsg          = "not allowed to change node name"
 	nodeIpChangeErrorMsg            = "not allowed to change node IP"
+	containerImageChangeErrorMsg    = "not allowed to change container image"
 	duplicateFenceAgentNameErrorMsg = "not allowed to have multiple fence agents with the same name"
 )
 
@@ -99,6 +100,10 @@ func (r *HALayerSet) ValidateUpdate(old runtime.Object) error {
 		return err
 	}
 
+	if err := validateContainerImage(oldCR, r); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -144,6 +149,15 @@ func validateFenceAgentUniqueness(r *HALayerSet) error {
 			return err
 		}
 		fenceAgentsNameSet[fenceAgentName] = setValuePlaceHolder
+	}
+	return nil
+}
+
+func validateContainerImage(oldCR *HALayerSet, r *HALayerSet) error {
+	if oldCR.Spec.ContainerImage != r.Spec.ContainerImage {
+		err := fmt.Errorf(containerImageChangeErrorMsg)
+		halayersetlog.Error(err, containerImageChangeErrorMsg, "original container image", oldCR.Spec.ContainerImage, "new container image", r.Spec.ContainerImage)
+		return err
 	}
 	return nil
 }
